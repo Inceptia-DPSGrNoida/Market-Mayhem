@@ -368,203 +368,137 @@ if _qp_theme is not None:
     if _lm != st.session_state["light_mode"]:
         st.session_state["light_mode"] = _lm
 
-_vol       = st.session_state["music_volume"]
-_light     = st.session_state["light_mode"]
-_theme_lbl = "🌙 Dark mode" if _light else "☀️ Light mode"
-_body_cls  = "light-mode" if _light else ""
+_vol   = st.session_state["music_volume"]
+_light = st.session_state["light_mode"]
 
-import streamlit.components.v1 as _components
-_components.html(f"""
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }}
-
-  #mm-header {{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 0 20px;
-  }}
-  #mm-team {{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.5px;
-  }}
-  #mm-sub {{ font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 2px; }}
-  #mm-right {{ display: flex; align-items: center; gap: 14px; flex-shrink: 0; }}
-  #mm-round {{ font-size: 12px; color: rgba(255,255,255,0.25); font-family: 'Space Grotesk', monospace; white-space: nowrap; }}
-  #mm-gear {{
-    width: 38px; height: 38px; border-radius: 50%;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
-    color: rgba(255,255,255,0.55); font-size: 18px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s; flex-shrink: 0;
-  }}
-  #mm-gear:hover {{ background: rgba(255,255,255,0.1); color: #fff; }}
-
-  /* Overlay */
-  #mm-overlay {{
-    display: none; position: fixed; inset: 0; z-index: 9998;
-    background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);
-  }}
-  #mm-overlay.open {{ display: block; }}
-
-  /* Panel */
-  #mm-panel {{
-    position: fixed; top: 0; right: -340px; width: 300px; height: 100vh;
-    background: #0d0f1a; border-left: 1px solid #1e2535;
-    z-index: 9999; padding: 28px 24px; overflow-y: auto;
-    transition: right 0.28s cubic-bezier(0.16,1,0.3,1);
-  }}
-  #mm-panel.open {{ right: 0; }}
-  .sp-hdr {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }}
-  .sp-hdr h3 {{ font-size: 18px; font-weight: 700; color: #fff; font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.3px; }}
-  .sp-close {{
-    width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
-    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }}
-  .sp-close:hover {{ background: rgba(255,77,106,0.15); color: #FF4D6A; border-color: rgba(255,77,106,0.3); }}
-  .sp-section {{ margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.05); }}
-  .sp-label {{ font-size: 11px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 12px; }}
-  .sp-toggle {{
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 14px; border-radius: 10px;
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-    cursor: pointer; transition: background 0.15s;
-  }}
-  .sp-toggle:hover {{ background: rgba(255,255,255,0.07); }}
-  .sp-toggle-text {{ font-size: 14px; color: rgba(255,255,255,0.75); font-weight: 500; }}
-  .sp-toggle-pill {{
-    width: 40px; height: 22px; border-radius: 11px; background: rgba(255,255,255,0.1);
-    position: relative; transition: background 0.2s; flex-shrink: 0;
-  }}
-  .sp-toggle-pill.on {{ background: #00C896; }}
-  .sp-toggle-pill::after {{
-    content: ''; position: absolute; top: 3px; left: 3px;
-    width: 16px; height: 16px; border-radius: 50%; background: #fff;
-    transition: transform 0.2s;
-  }}
-  .sp-toggle-pill.on::after {{ transform: translateX(18px); }}
-  .sp-vol-label {{ font-size: 14px; color: rgba(255,255,255,0.75); font-weight: 500; margin-bottom: 14px; }}
-  .sp-vol-row {{ display: flex; align-items: center; gap: 10px; }}
-  .sp-vol-icon {{ font-size: 16px; }}
-  input[type=range] {{
-    flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
-    background: rgba(255,255,255,0.12); outline: none; cursor: pointer;
-  }}
-  input[type=range]::-webkit-slider-thumb {{
-    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-    background: #00C896; cursor: pointer; box-shadow: 0 0 0 3px rgba(0,200,150,0.2);
-  }}
-  .sp-vol-val {{ font-size: 13px; color: rgba(255,255,255,0.4); min-width: 30px; text-align: right; font-family: monospace; }}
-</style>
-
-<div id="mm-header">
+# Header rendered normally in Streamlit (correct width, no iframe)
+st.markdown(f"""
+<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
   <div>
-    <div id="mm-team">{team['name']}{participant_tag}</div>
-    <div id="mm-sub">Market Mayhem · Inceptia</div>
+    <div style="font-family:Space Grotesk,sans-serif;font-size:26px;font-weight:700;color:var(--hdr-col,#fff);letter-spacing:-0.5px">{team['name']}{participant_tag}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:2px">Market Mayhem · Inceptia</div>
   </div>
-  <div id="mm-right">
-    <div id="mm-round">Round {state['round']} / 4</div>
-    <div id="mm-gear" title="Settings">⚙</div>
-  </div>
-</div>
-
-<div id="mm-overlay"></div>
-<div id="mm-panel">
-  <div class="sp-hdr">
-    <h3>Settings</h3>
-    <div class="sp-close" id="sp-close-btn">✕</div>
-  </div>
-
-  <div class="sp-section">
-    <div class="sp-label">Appearance</div>
-    <div class="sp-toggle" id="sp-theme-toggle">
-      <span class="sp-toggle-text" id="sp-theme-text">{_theme_lbl}</span>
-      <div class="sp-toggle-pill {'on' if _light else ''}" id="sp-theme-pill"></div>
-    </div>
-  </div>
-
-  <div class="sp-section" style="border-bottom:none">
-    <div class="sp-label">Music Volume</div>
-    <div class="sp-vol-label">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>
-    <div class="sp-vol-row">
-      <span class="sp-vol-icon">🔈</span>
-      <input type="range" id="sp-vol-slider" min="0" max="100" value="{_vol}">
-      <span class="sp-vol-icon">🔊</span>
-      <span class="sp-vol-val" id="sp-vol-num">{_vol}</span>
-    </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <div style="font-size:12px;color:rgba(255,255,255,0.25);font-family:Space Grotesk,monospace">Round {state['round']} / 4</div>
+    <div id="mm-gear" onclick="mmOpenSettings()" title="Settings"
+         style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);
+                color:rgba(255,255,255,0.55);font-size:18px;cursor:pointer;display:flex;align-items:center;
+                justify-content:center;transition:background 0.15s,color 0.15s;flex-shrink:0;user-select:none">⚙</div>
   </div>
 </div>
+
+<!-- Settings overlay + panel — appended to body so position:fixed works on the real page -->
+<style>
+#mm-overlay {{
+  display:none; position:fixed; inset:0; z-index:9998;
+  background:rgba(0,0,0,0.5); backdrop-filter:blur(3px);
+  animation:mmFadeIn 0.2s ease;
+}}
+@keyframes mmFadeIn {{ from{{opacity:0}} to{{opacity:1}} }}
+#mm-panel {{
+  position:fixed; top:0; right:0; width:290px; height:100vh;
+  background:#0d0f1a; border-left:1px solid #1e2535;
+  z-index:9999; padding:28px 22px; overflow-y:auto; box-sizing:border-box;
+  transform:translateX(100%); transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
+}}
+#mm-panel.mm-open {{ transform:translateX(0); }}
+#mm-overlay.mm-open {{ display:block; }}
+.sp-hdr {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; }}
+.sp-title {{ font-family:Space Grotesk,sans-serif; font-size:18px; font-weight:700; color:#fff; letter-spacing:-0.3px; }}
+.sp-x {{ width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
+         background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);font-size:15px;
+         cursor:pointer;display:flex;align-items:center;justify-content:center;
+         transition:background 0.15s,color 0.15s,border-color 0.15s; }}
+.sp-x:hover {{ background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }}
+.sp-sec {{ margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }}
+.sp-lbl {{ font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }}
+.sp-toggle {{ display:flex;align-items:center;justify-content:space-between;padding:11px 13px;
+              border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+              cursor:pointer;transition:background 0.15s;user-select:none; }}
+.sp-toggle:hover {{ background:rgba(255,255,255,0.07); }}
+.sp-ttext {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500; }}
+.sp-pill {{ width:38px;height:21px;border-radius:11px;background:rgba(255,255,255,0.1);
+            position:relative;transition:background 0.2s;flex-shrink:0; }}
+.sp-pill.on {{ background:#00C896; }}
+.sp-pill::after {{ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
+                   border-radius:50%;background:#fff;transition:transform 0.2s; }}
+.sp-pill.on::after {{ transform:translateX(17px); }}
+.sp-vlabel {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
+.sp-vrow {{ display:flex;align-items:center;gap:10px; }}
+.sp-vrow input[type=range] {{ flex:1;-webkit-appearance:none;height:4px;border-radius:2px;
+  background:rgba(255,255,255,0.12);outline:none;cursor:pointer; }}
+.sp-vrow input[type=range]::-webkit-slider-thumb {{ -webkit-appearance:none;width:18px;height:18px;
+  border-radius:50%;background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2); }}
+.sp-vval {{ font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }}
+</style>
 
 <script>
 (function() {{
-  var gear    = document.getElementById('mm-gear');
-  var overlay = document.getElementById('mm-overlay');
-  var panel   = document.getElementById('mm-panel');
-  var closeBtn= document.getElementById('sp-close-btn');
-  var themeToggle = document.getElementById('sp-theme-toggle');
-  var themePill   = document.getElementById('sp-theme-pill');
-  var themeText   = document.getElementById('sp-theme-text');
-  var volSlider   = document.getElementById('sp-vol-slider');
-  var volNum      = document.getElementById('sp-vol-num');
+  // Build panel DOM inside document.body (not inside any Streamlit container)
+  if (document.getElementById('mm-panel')) return; // idempotent
 
+  var overlay = document.createElement('div'); overlay.id = 'mm-overlay';
+  var panel   = document.createElement('div'); panel.id   = 'mm-panel';
   var isLight = {'true' if _light else 'false'};
+  var vol     = {_vol};
 
-  function openPanel() {{
-    panel.classList.add('open');
-    overlay.classList.add('open');
-  }}
-  function closePanel() {{
-    panel.classList.remove('open');
-    overlay.classList.remove('open');
-  }}
+  panel.innerHTML = `
+    <div class="sp-hdr">
+      <span class="sp-title">Settings</span>
+      <div class="sp-x" id="mm-close">✕</div>
+    </div>
+    <div class="sp-sec">
+      <div class="sp-lbl">Appearance</div>
+      <div class="sp-toggle" id="mm-theme-row">
+        <span class="sp-ttext" id="mm-ttext">${{isLight ? '🌙 Dark mode' : '☀️ Light mode'}}</span>
+        <div class="sp-pill ${{isLight ? 'on' : ''}}" id="mm-pill"></div>
+      </div>
+    </div>
+    <div class="sp-sec" style="border-bottom:none">
+      <div class="sp-lbl">Music Volume</div>
+      <div class="sp-vlabel">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>
+      <div class="sp-vrow">
+        <span style="font-size:15px">🔈</span>
+        <input type="range" id="mm-vol" min="0" max="100" value="${{vol}}">
+        <span style="font-size:15px">🔊</span>
+        <span class="sp-vval" id="mm-vval">${{vol}}</span>
+      </div>
+    </div>
+  `;
 
-  gear.addEventListener('click', openPanel);
-  closeBtn.addEventListener('click', closePanel);
-  overlay.addEventListener('click', closePanel);
+  document.body.appendChild(overlay);
+  document.body.appendChild(panel);
+
+  // Apply light mode on load
+  if (isLight) document.body.classList.add('light-mode');
+
+  function open()  {{ panel.classList.add('mm-open'); overlay.classList.add('mm-open'); }}
+  function close() {{ panel.classList.remove('mm-open'); overlay.classList.remove('mm-open'); }}
+
+  overlay.addEventListener('click', close);
+  document.getElementById('mm-close').addEventListener('click', close);
 
   // Theme toggle
-  themeToggle.addEventListener('click', function() {{
+  document.getElementById('mm-theme-row').addEventListener('click', function() {{
     isLight = !isLight;
-    themePill.classList.toggle('on', isLight);
-    themeText.textContent = isLight ? '🌙 Dark mode' : '☀️ Light mode';
-    // Apply to parent document
-    try {{
-      var parentDoc = window.parent.document;
-      if (isLight) parentDoc.body.classList.add('light-mode');
-      else parentDoc.body.classList.remove('light-mode');
-    }} catch(e) {{}}
-    // Persist via URL so Streamlit picks it up on next rerun
-    var url = new URL(window.parent.location.href);
-    url.searchParams.set('theme', isLight ? 'light' : 'dark');
-    window.parent.history.replaceState(null, '', url.toString());
+    document.getElementById('mm-pill').classList.toggle('on', isLight);
+    document.getElementById('mm-ttext').textContent = isLight ? '🌙 Dark mode' : '☀️ Light mode';
+    if (isLight) document.body.classList.add('light-mode');
+    else document.body.classList.remove('light-mode');
   }});
 
-  // Volume slider — live update audio if present, persist on release
-  volSlider.addEventListener('input', function() {{
-    volNum.textContent = this.value;
-    var vol = parseInt(this.value) / 100;
-    try {{
-      var audio = window.parent.document.getElementById('mm-bg-audio');
-      if (audio) audio.volume = vol;
-    }} catch(e) {{}}
-  }});
-  volSlider.addEventListener('change', function() {{
-    var url = new URL(window.parent.location.href);
-    url.searchParams.set('vol', this.value);
-    window.parent.history.replaceState(null, '', url.toString());
+  // Volume slider
+  document.getElementById('mm-vol').addEventListener('input', function() {{
+    document.getElementById('mm-vval').textContent = this.value;
+    var audio = document.getElementById('mm-bg-audio');
+    if (audio) audio.volume = parseInt(this.value) / 100;
   }});
 
-  // Apply theme immediately on load
-  try {{
-    var parentDoc = window.parent.document;
-    if (isLight) parentDoc.body.classList.add('light-mode');
-    else parentDoc.body.classList.remove('light-mode');
-  }} catch(e) {{}}
+  // Expose open function globally for the gear button
+  window.mmOpenSettings = open;
 }})();
 </script>
-""", height=80, scrolling=False)
+""", unsafe_allow_html=True)
 
 phase_map = {
     "lobby":   ("phase-lobby",   "WAITING FOR HOST",               "The trading floor opens shortly."),
