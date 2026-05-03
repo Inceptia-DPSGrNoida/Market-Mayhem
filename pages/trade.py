@@ -144,9 +144,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .loan-btn   button { background:rgba(139,92,246,0.12) !important; border:1px solid rgba(139,92,246,0.3) !important; color:#a78bfa !important; font-weight:600 !important; }
 .repay-btn  button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.25) !important; color:#FF4D6A !important; font-weight:600 !important; }
 
-/* Settings gear button */
-.settings-gear-btn { background:rgba(255,255,255,0.05) !important; border:1px solid rgba(255,255,255,0.12) !important; color:rgba(255,255,255,0.5) !important; font-size:18px !important; width:38px !important; height:38px !important; border-radius:50% !important; padding:0 !important; min-height:unset !important; }
-.settings-gear-btn:hover { background:rgba(255,255,255,0.1) !important; color:#fff !important; }
+/* Settings gear button — handled inside st.components.v1.html */
 
 .short-btn button { background:rgba(255,140,0,0.1) !important; border:1px solid rgba(255,140,0,0.35) !important; color:#ff9a3c !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
 .cover-btn button { background:rgba(56,189,248,0.1) !important; border:1px solid rgba(56,189,248,0.35) !important; color:#38bdf8 !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
@@ -172,17 +170,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .gameover-screen h1 span { color:#00C896; }
 .gameover-screen p { font-size:18px; color:rgba(255,255,255,0.4); max-width:500px; margin:0 auto; line-height:1.7; }
 
-/* Settings panel */
-.settings-overlay { position:fixed; top:0; left:0; right:0; bottom:0; z-index:9998; background:rgba(0,0,0,0.4); backdrop-filter:blur(4px); animation:fadeIn 0.2s ease; }
-.settings-panel { position:fixed; top:0; right:0; width:320px; height:100vh; background:rgba(13,15,26,0.97); border-left:1px solid #1e2535; z-index:9999; padding:28px 24px; animation:slideIn 0.25s cubic-bezier(0.16,1,0.3,1); overflow-y:auto; }
-@keyframes fadeIn { from{opacity:0} to{opacity:1} }
-@keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-.settings-panel h3 { font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; color:#fff; margin-bottom:24px; letter-spacing:-0.3px; }
-.settings-row { margin-bottom:24px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:24px; }
-.settings-label { font-size:11px; color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:1.5px; font-weight:600; margin-bottom:10px; }
-.toggle-row { display:flex; align-items:center; justify-content:space-between; }
-.toggle-text { font-size:14px; color:rgba(255,255,255,0.7); font-weight:500; }
-
 /* Light mode overrides */
 body.light-mode { background:#f0f2f5 !important; }
 body.light-mode .ticker-wrap { background:#e8eaf0; border-color:#d0d4e0; }
@@ -194,11 +181,6 @@ body.light-mode .company-meta,body.light-mode .company-trait,body.light-mode .co
 body.light-mode .price-main { color:#0d0f1a; }
 body.light-mode .value { color:#0d0f1a !important; }
 body.light-mode .section-hdr { color:#0d0f1a; border-color:#e0e4ef; }
-body.light-mode .settings-panel { background:rgba(240,242,245,0.98); border-color:#d0d4e0; }
-body.light-mode .settings-panel h3 { color:#0d0f1a; }
-body.light-mode .settings-label { color:rgba(0,0,0,0.4); }
-body.light-mode .toggle-text { color:rgba(0,0,0,0.65); }
-body.light-mode [class*="css"] { color:#0d0f1a; }
 
 div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
     background: #0a4a35 !important; border: 1px solid #00C896 !important;
@@ -361,66 +343,228 @@ if phase == "ended":
     </div>""", unsafe_allow_html=True)
     st.stop()  # Don't render anything else after game over
 
-# ── Header (non-ended phases only) ───────────────────────────────────────────
+# ── Header + Settings (non-ended phases only) ────────────────────────────────
 participant_tag = f' &nbsp;<span style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.35)">· P{team.get("participant_num","")}</span>' if team.get("participant_num") else ""
 
-# Settings state
-if "settings_open" not in st.session_state: st.session_state["settings_open"] = False
-if "music_volume" not in st.session_state: st.session_state["music_volume"] = 50
-if "light_mode" not in st.session_state: st.session_state["light_mode"] = False
+# Settings state — read from query params so JS can write them without a rerun
+_qp = st.query_params
+if "music_volume" not in st.session_state:
+    st.session_state["music_volume"] = int(_qp.get("vol", 50))
+if "light_mode" not in st.session_state:
+    st.session_state["light_mode"] = _qp.get("theme", "dark") == "light"
 
-hcol_left, hcol_mid, hcol_right = st.columns([6, 2, 1])
-with hcol_left:
-    st.markdown(f"""
-    <div style="margin:14px 0 20px">
-      <div style="font-family:Space Grotesk,sans-serif;font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.5px">{team['name']}{participant_tag}</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:2px">Market Mayhem · Inceptia</div>
-    </div>""", unsafe_allow_html=True)
-with hcol_mid:
-    st.markdown(f'<div style="font-size:12px;color:rgba(255,255,255,0.25);font-family:Space Grotesk,monospace;margin-top:22px;text-align:right">Round {state["round"]} / 4</div>', unsafe_allow_html=True)
-with hcol_right:
-    st.markdown('<div style="margin-top:14px">', unsafe_allow_html=True)
-    st.markdown('<style>.gear-col button { background:rgba(255,255,255,0.05) !important; border:1px solid rgba(255,255,255,0.12) !important; color:rgba(255,255,255,0.6) !important; font-size:18px !important; border-radius:50% !important; height:38px !important; } .gear-col button:hover { background:rgba(255,255,255,0.1) !important; color:#fff !important; }</style>', unsafe_allow_html=True)
-    st.markdown('<div class="gear-col">', unsafe_allow_html=True)
-    if st.button("⚙", key="open_settings_btn", use_container_width=False):
-        st.session_state["settings_open"] = not st.session_state["settings_open"]
-        st.rerun()
-    st.markdown('</div></div>', unsafe_allow_html=True)
+# Handle query param updates from the JS settings panel
+_qp_vol   = _qp.get("vol")
+_qp_theme = _qp.get("theme")
+if _qp_vol is not None:
+    try:
+        _v = int(_qp_vol)
+        if _v != st.session_state["music_volume"]:
+            st.session_state["music_volume"] = _v
+    except ValueError:
+        pass
+if _qp_theme is not None:
+    _lm = (_qp_theme == "light")
+    if _lm != st.session_state["light_mode"]:
+        st.session_state["light_mode"] = _lm
 
-# Settings panel (slide-in overlay using Streamlit widgets positioned via CSS)
-if st.session_state["settings_open"]:
-    light_mode = st.session_state["light_mode"]
-    music_vol   = st.session_state["music_volume"]
-    toggle_label = "☀️ Light" if not light_mode else "🌙 Dark"
-    st.markdown("""<div class="settings-overlay"></div>
-    <div class="settings-panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-        <h3 style="margin:0">Settings</h3>
-      </div>
-      <div class="settings-row">
-        <div class="settings-label">Appearance</div>
-      </div>
-      <div class="settings-row">
-        <div class="settings-label">Music Volume</div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:8px">Background music level (lobby &amp; breaks)</div>
-      </div>
-    </div>""", unsafe_allow_html=True)
-    s1, s2, s3 = st.columns([1, 1, 1])
-    with s1:
-        if st.button("✕ Close", key="close_settings_btn"):
-            st.session_state["settings_open"] = False
-            st.rerun()
-    with s2:
-        if st.button(toggle_label, key="toggle_theme_btn"):
-            st.session_state["light_mode"] = not st.session_state["light_mode"]
-            st.rerun()
-    new_vol = st.slider("Volume", 0, 100, music_vol, key="music_vol_slider")
-    if new_vol != music_vol:
-        st.session_state["music_volume"] = new_vol
+_vol       = st.session_state["music_volume"]
+_light     = st.session_state["light_mode"]
+_theme_lbl = "🌙 Dark mode" if _light else "☀️ Light mode"
+_body_cls  = "light-mode" if _light else ""
 
-# Apply light mode
-if st.session_state.get("light_mode"):
-    st.markdown('<script>document.body.classList.add("light-mode")</script>', unsafe_allow_html=True)
+import streamlit.components.v1 as _components
+_components.html(f"""
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }}
+
+  #mm-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0 20px;
+  }}
+  #mm-team {{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px; font-weight: 700; color: #fff; letter-spacing: -0.5px;
+  }}
+  #mm-sub {{ font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 2px; }}
+  #mm-right {{ display: flex; align-items: center; gap: 14px; flex-shrink: 0; }}
+  #mm-round {{ font-size: 12px; color: rgba(255,255,255,0.25); font-family: 'Space Grotesk', monospace; white-space: nowrap; }}
+  #mm-gear {{
+    width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.55); font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s; flex-shrink: 0;
+  }}
+  #mm-gear:hover {{ background: rgba(255,255,255,0.1); color: #fff; }}
+
+  /* Overlay */
+  #mm-overlay {{
+    display: none; position: fixed; inset: 0; z-index: 9998;
+    background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);
+  }}
+  #mm-overlay.open {{ display: block; }}
+
+  /* Panel */
+  #mm-panel {{
+    position: fixed; top: 0; right: -340px; width: 300px; height: 100vh;
+    background: #0d0f1a; border-left: 1px solid #1e2535;
+    z-index: 9999; padding: 28px 24px; overflow-y: auto;
+    transition: right 0.28s cubic-bezier(0.16,1,0.3,1);
+  }}
+  #mm-panel.open {{ right: 0; }}
+  .sp-hdr {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }}
+  .sp-hdr h3 {{ font-size: 18px; font-weight: 700; color: #fff; font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.3px; }}
+  .sp-close {{
+    width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }}
+  .sp-close:hover {{ background: rgba(255,77,106,0.15); color: #FF4D6A; border-color: rgba(255,77,106,0.3); }}
+  .sp-section {{ margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.05); }}
+  .sp-label {{ font-size: 11px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 12px; }}
+  .sp-toggle {{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer; transition: background 0.15s;
+  }}
+  .sp-toggle:hover {{ background: rgba(255,255,255,0.07); }}
+  .sp-toggle-text {{ font-size: 14px; color: rgba(255,255,255,0.75); font-weight: 500; }}
+  .sp-toggle-pill {{
+    width: 40px; height: 22px; border-radius: 11px; background: rgba(255,255,255,0.1);
+    position: relative; transition: background 0.2s; flex-shrink: 0;
+  }}
+  .sp-toggle-pill.on {{ background: #00C896; }}
+  .sp-toggle-pill::after {{
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: transform 0.2s;
+  }}
+  .sp-toggle-pill.on::after {{ transform: translateX(18px); }}
+  .sp-vol-label {{ font-size: 14px; color: rgba(255,255,255,0.75); font-weight: 500; margin-bottom: 14px; }}
+  .sp-vol-row {{ display: flex; align-items: center; gap: 10px; }}
+  .sp-vol-icon {{ font-size: 16px; }}
+  input[type=range] {{
+    flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.12); outline: none; cursor: pointer;
+  }}
+  input[type=range]::-webkit-slider-thumb {{
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: #00C896; cursor: pointer; box-shadow: 0 0 0 3px rgba(0,200,150,0.2);
+  }}
+  .sp-vol-val {{ font-size: 13px; color: rgba(255,255,255,0.4); min-width: 30px; text-align: right; font-family: monospace; }}
+</style>
+
+<div id="mm-header">
+  <div>
+    <div id="mm-team">{team['name']}{participant_tag}</div>
+    <div id="mm-sub">Market Mayhem · Inceptia</div>
+  </div>
+  <div id="mm-right">
+    <div id="mm-round">Round {state['round']} / 4</div>
+    <div id="mm-gear" title="Settings">⚙</div>
+  </div>
+</div>
+
+<div id="mm-overlay"></div>
+<div id="mm-panel">
+  <div class="sp-hdr">
+    <h3>Settings</h3>
+    <div class="sp-close" id="sp-close-btn">✕</div>
+  </div>
+
+  <div class="sp-section">
+    <div class="sp-label">Appearance</div>
+    <div class="sp-toggle" id="sp-theme-toggle">
+      <span class="sp-toggle-text" id="sp-theme-text">{_theme_lbl}</span>
+      <div class="sp-toggle-pill {'on' if _light else ''}" id="sp-theme-pill"></div>
+    </div>
+  </div>
+
+  <div class="sp-section" style="border-bottom:none">
+    <div class="sp-label">Music Volume</div>
+    <div class="sp-vol-label">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>
+    <div class="sp-vol-row">
+      <span class="sp-vol-icon">🔈</span>
+      <input type="range" id="sp-vol-slider" min="0" max="100" value="{_vol}">
+      <span class="sp-vol-icon">🔊</span>
+      <span class="sp-vol-val" id="sp-vol-num">{_vol}</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  var gear    = document.getElementById('mm-gear');
+  var overlay = document.getElementById('mm-overlay');
+  var panel   = document.getElementById('mm-panel');
+  var closeBtn= document.getElementById('sp-close-btn');
+  var themeToggle = document.getElementById('sp-theme-toggle');
+  var themePill   = document.getElementById('sp-theme-pill');
+  var themeText   = document.getElementById('sp-theme-text');
+  var volSlider   = document.getElementById('sp-vol-slider');
+  var volNum      = document.getElementById('sp-vol-num');
+
+  var isLight = {'true' if _light else 'false'};
+
+  function openPanel() {{
+    panel.classList.add('open');
+    overlay.classList.add('open');
+  }}
+  function closePanel() {{
+    panel.classList.remove('open');
+    overlay.classList.remove('open');
+  }}
+
+  gear.addEventListener('click', openPanel);
+  closeBtn.addEventListener('click', closePanel);
+  overlay.addEventListener('click', closePanel);
+
+  // Theme toggle
+  themeToggle.addEventListener('click', function() {{
+    isLight = !isLight;
+    themePill.classList.toggle('on', isLight);
+    themeText.textContent = isLight ? '🌙 Dark mode' : '☀️ Light mode';
+    // Apply to parent document
+    try {{
+      var parentDoc = window.parent.document;
+      if (isLight) parentDoc.body.classList.add('light-mode');
+      else parentDoc.body.classList.remove('light-mode');
+    }} catch(e) {{}}
+    // Persist via URL so Streamlit picks it up on next rerun
+    var url = new URL(window.parent.location.href);
+    url.searchParams.set('theme', isLight ? 'light' : 'dark');
+    window.parent.history.replaceState(null, '', url.toString());
+  }});
+
+  // Volume slider — live update audio if present, persist on release
+  volSlider.addEventListener('input', function() {{
+    volNum.textContent = this.value;
+    var vol = parseInt(this.value) / 100;
+    try {{
+      var audio = window.parent.document.getElementById('mm-bg-audio');
+      if (audio) audio.volume = vol;
+    }} catch(e) {{}}
+  }});
+  volSlider.addEventListener('change', function() {{
+    var url = new URL(window.parent.location.href);
+    url.searchParams.set('vol', this.value);
+    window.parent.history.replaceState(null, '', url.toString());
+  }});
+
+  // Apply theme immediately on load
+  try {{
+    var parentDoc = window.parent.document;
+    if (isLight) parentDoc.body.classList.add('light-mode');
+    else parentDoc.body.classList.remove('light-mode');
+  }} catch(e) {{}}
+}})();
+</script>
+""", height=80, scrolling=False)
 
 phase_map = {
     "lobby":   ("phase-lobby",   "WAITING FOR HOST",               "The trading floor opens shortly."),
