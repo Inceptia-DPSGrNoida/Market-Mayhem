@@ -2,7 +2,7 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 
-_MP3_NAME = "solarflex-soft-background-music-515502.mp3"
+_MP3_NAME = "music.mp3"
 _here = Path(__file__).parent
 _MUSIC_FILE = next(
     (p for p in [_here / _MP3_NAME, _here.parent / _MP3_NAME] if p.exists()),
