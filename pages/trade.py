@@ -1,11 +1,25 @@
 import streamlit as st
 import json, time, uuid
 from pathlib import Path
-import sys
+import sys, importlib.util
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import load_state, save_state, STARTING_CASH, ROUND_DURATION
 from streamlit_autorefresh import st_autorefresh
-from music_player import inject_music
+
+# Load music_player from root dir (works whether it lives in pages/ or root)
+def _load_music_player():
+    for candidate in [
+        Path(__file__).parent / "music_player.py",        # pages/music_player.py
+        Path(__file__).parent.parent / "music_player.py", # root/music_player.py
+    ]:
+        if candidate.exists():
+            spec = importlib.util.spec_from_file_location("music_player", candidate)
+            mod  = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod.inject_music
+    return lambda phase, volume=50: None  # graceful no-op if file missing
+
+inject_music = _load_music_player()
 
 BREAK_DURATION = 300
 
