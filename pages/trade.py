@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import load_state, save_state, STARTING_CASH, ROUND_DURATION
 from streamlit_autorefresh import st_autorefresh
+from music_player import inject_music
 
 BREAK_DURATION = 300
 
@@ -108,11 +109,12 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 .loan-card { background:#0d0f1a; border:1px solid rgba(139,92,246,0.25); border-radius:12px; padding:18px 22px; margin-bottom:16px; }
 .loan-title { font-size:13px; font-weight:600; color:#a78bfa; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:10px; }
-.bank-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
-.bank-card { background:#0d0f1a; border-radius:12px; padding:18px 20px; cursor:pointer; transition:border-color 0.2s; }
+.bank-grid { display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:20px; }
+.bank-card { background:#0d0f1a; border-radius:12px; padding:18px 20px; cursor:pointer; transition:all 0.2s; }
 .bank-safe  { border:1px solid rgba(0,200,150,0.3); }
 .bank-mid   { border:1px solid rgba(255,200,0,0.3); }
 .bank-risky { border:1px solid rgba(255,77,106,0.3); }
+.bank-card:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(0,0,0,0.3); }
 .bank-card .bk-name { font-size:14px; font-weight:700; color:#fff; margin-bottom:4px; }
 .bank-card .bk-rate { font-size:22px; font-weight:700; font-family:'Space Grotesk',monospace; margin-bottom:6px; }
 .bank-safe  .bk-rate { color:#00C896; }
@@ -120,8 +122,17 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .bank-risky .bk-rate { color:#FF4D6A; }
 .bank-card .bk-limit { font-size:12px; color:rgba(255,255,255,0.4); }
 .bank-card .bk-note  { font-size:11px; color:rgba(255,255,255,0.25); margin-top:8px; font-style:italic; }
+.bank-accordion { overflow:hidden; max-height:0; transition:max-height 0.4s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease; opacity:0; border-radius:0 0 12px 12px; margin-top:-4px; }
+.bank-accordion.open { max-height:300px; opacity:1; }
+.bank-accordion-inner { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-top:none; border-radius:0 0 12px 12px; padding:16px 20px; }
+.bk-chevron { float:right; font-size:16px; transition:transform 0.3s; color:rgba(255,255,255,0.3); }
+.bk-chevron.open { transform:rotate(180deg); color:rgba(255,255,255,0.6); }
 .loan-btn   button { background:rgba(139,92,246,0.12) !important; border:1px solid rgba(139,92,246,0.3) !important; color:#a78bfa !important; font-weight:600 !important; }
 .repay-btn  button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.25) !important; color:#FF4D6A !important; font-weight:600 !important; }
+
+/* Settings gear button */
+.settings-gear-btn { background:rgba(255,255,255,0.05) !important; border:1px solid rgba(255,255,255,0.12) !important; color:rgba(255,255,255,0.5) !important; font-size:18px !important; width:38px !important; height:38px !important; border-radius:50% !important; padding:0 !important; min-height:unset !important; }
+.settings-gear-btn:hover { background:rgba(255,255,255,0.1) !important; color:#fff !important; }
 
 .short-btn button { background:rgba(255,140,0,0.1) !important; border:1px solid rgba(255,140,0,0.35) !important; color:#ff9a3c !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
 .cover-btn button { background:rgba(56,189,248,0.1) !important; border:1px solid rgba(56,189,248,0.35) !important; color:#38bdf8 !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
@@ -183,9 +194,9 @@ div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
 """, unsafe_allow_html=True)
 
 BANKS = {
-    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "min_borrow":5000,  "max_borrow":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates."},
-    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "min_borrow":40000, "max_borrow":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams."},
-    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "min_borrow":90000, "max_borrow":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted."},
+    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "min_borrow":5000,  "max_borrow":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates.",  "borrow_options":[5000,10000,25000,50000]},
+    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "min_borrow":40000, "max_borrow":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams.", "borrow_options":[40000,60000,80000,100000]},
+    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "min_borrow":90000, "max_borrow":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted.", "borrow_options":[90000,120000,160000,200000]},
 }
 
 def fmt(n): return f"₹{int(n):,}"
@@ -268,6 +279,10 @@ state = load_state()
 team = state["teams"].get(tid)
 phase = state["phase"]
 
+# ── Music ─────────────────────────────────────────────────────────────────────
+_music_vol = st.session_state.get("music_volume", 50)
+inject_music(phase, _music_vol)
+
 # ── Live micro-fluctuation engine ────────────────────────────────────────────
 # Real prices only change at round start (host). This adds visual micro-ticks
 # every ~3s during trading so charts show live movement. Stored in session state
@@ -334,14 +349,64 @@ if phase == "ended":
 
 # ── Header (non-ended phases only) ───────────────────────────────────────────
 participant_tag = f' &nbsp;<span style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.35)">· P{team.get("participant_num","")}</span>' if team.get("participant_num") else ""
-st.markdown(f"""
-<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
-  <div>
-    <div style="font-family:Space Grotesk,sans-serif;font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.5px">{team['name']}{participant_tag}</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:2px">Market Mayhem · Inceptia</div>
-  </div>
-  <div style="font-size:12px;color:rgba(255,255,255,0.25);font-family:Space Grotesk,monospace">Round {state['round']} / 4</div>
-</div>""", unsafe_allow_html=True)
+
+# Settings state
+if "settings_open" not in st.session_state: st.session_state["settings_open"] = False
+if "music_volume" not in st.session_state: st.session_state["music_volume"] = 50
+if "light_mode" not in st.session_state: st.session_state["light_mode"] = False
+
+hcol_left, hcol_mid, hcol_right = st.columns([6, 2, 1])
+with hcol_left:
+    st.markdown(f"""
+    <div style="margin:14px 0 20px">
+      <div style="font-family:Space Grotesk,sans-serif;font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.5px">{team['name']}{participant_tag}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-top:2px">Market Mayhem · Inceptia</div>
+    </div>""", unsafe_allow_html=True)
+with hcol_mid:
+    st.markdown(f'<div style="font-size:12px;color:rgba(255,255,255,0.25);font-family:Space Grotesk,monospace;margin-top:22px;text-align:right">Round {state["round"]} / 4</div>', unsafe_allow_html=True)
+with hcol_right:
+    st.markdown('<div style="margin-top:14px">', unsafe_allow_html=True)
+    st.markdown('<style>.gear-col button { background:rgba(255,255,255,0.05) !important; border:1px solid rgba(255,255,255,0.12) !important; color:rgba(255,255,255,0.6) !important; font-size:18px !important; border-radius:50% !important; height:38px !important; } .gear-col button:hover { background:rgba(255,255,255,0.1) !important; color:#fff !important; }</style>', unsafe_allow_html=True)
+    st.markdown('<div class="gear-col">', unsafe_allow_html=True)
+    if st.button("⚙", key="open_settings_btn", use_container_width=False):
+        st.session_state["settings_open"] = not st.session_state["settings_open"]
+        st.rerun()
+    st.markdown('</div></div>', unsafe_allow_html=True)
+
+# Settings panel (slide-in overlay using Streamlit widgets positioned via CSS)
+if st.session_state["settings_open"]:
+    light_mode = st.session_state["light_mode"]
+    music_vol   = st.session_state["music_volume"]
+    toggle_label = "☀️ Light" if not light_mode else "🌙 Dark"
+    st.markdown("""<div class="settings-overlay"></div>
+    <div class="settings-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <h3 style="margin:0">Settings</h3>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Appearance</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Music Volume</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:8px">Background music level (lobby &amp; breaks)</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+    s1, s2, s3 = st.columns([1, 1, 1])
+    with s1:
+        if st.button("✕ Close", key="close_settings_btn"):
+            st.session_state["settings_open"] = False
+            st.rerun()
+    with s2:
+        if st.button(toggle_label, key="toggle_theme_btn"):
+            st.session_state["light_mode"] = not st.session_state["light_mode"]
+            st.rerun()
+    new_vol = st.slider("Volume", 0, 100, music_vol, key="music_vol_slider")
+    if new_vol != music_vol:
+        st.session_state["music_volume"] = new_vol
+
+# Apply light mode
+if st.session_state.get("light_mode"):
+    st.markdown('<script>document.body.classList.add("light-mode")</script>', unsafe_allow_html=True)
 
 phase_map = {
     "lobby":   ("phase-lobby",   "WAITING FOR HOST",               "The trading floor opens shortly."),
@@ -588,34 +653,64 @@ elif active == "news":
 
 elif active == "loans":
     st.markdown('<div class="section-hdr">Bank Loans</div>', unsafe_allow_html=True)
-    st.markdown('<div class="bank-grid">', unsafe_allow_html=True)
-    for bk_id, bk in BANKS.items():
-        bank_bal = team.get(f"loan_{bk_id}",0)
-        used_pct = int(bank_bal/bk["cap"]*100) if bk["cap"] else 0
-        st.markdown(f'<div class="bank-card {bk["css"]}"><div class="bk-name">{bk["name"]}</div><div class="bk-rate">{bk["rate_label"]}</div><div class="bk-limit">Limit: {fmt(bk["cap"])} · Borrowed: {fmt(bank_bal)} ({used_pct}%)</div><div class="bk-note">{bk["note"]}</div></div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    if "bank_open" not in st.session_state:
+        st.session_state["bank_open"] = None
+
     if loan_balance > 0:
         st.markdown(f'<div class="loan-card"><div class="loan-title">Total Outstanding Loan</div><span style="font-size:28px;font-weight:700;font-family:Space Grotesk,monospace;color:#a78bfa">{fmt(loan_balance)}</span><div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:10px">Interest charged per bank at round-end.</div></div>', unsafe_allow_html=True)
-    if can_bank:
-        st.markdown('<p style="font-size:13px;font-weight:500;color:#fff;margin:16px 0 8px">Borrow more capital:</p>', unsafe_allow_html=True)
-        for bk_id, bk in BANKS.items():
-            bank_bal = team.get(f"loan_{bk_id}",0); available = max(0, bk["cap"]-bank_bal)
-            if available <= 0:
-                st.markdown(f'<p style="font-size:12px;color:rgba(255,255,255,0.2);margin-bottom:4px">{bk["name"]} — credit limit reached.</p>', unsafe_allow_html=True); continue
-            valid_amts = [a for a in bk["borrow_options"] if a <= available]
-            if not valid_amts: continue
-            st.markdown(f'<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:10px 0 6px"><strong style="color:#fff">{bk["name"]}</strong></p>', unsafe_allow_html=True)
-            bcols = st.columns(len(valid_amts))
-            for i, amt in enumerate(valid_amts):
-                with bcols[i]:
-                    st.markdown('<div class="loan-btn">', unsafe_allow_html=True)
-                    if st.button(fmt(amt), key=f"borrow_{bk_id}_{amt}", use_container_width=True):
-                        state = load_state(); team = state["teams"][tid]
-                        team["cash"] = team.get("cash",0)+amt; team["loan_balance"] = team.get("loan_balance",0)+amt
-                        team[f"loan_{bk_id}"] = team.get(f"loan_{bk_id}",0)+amt
-                        state["teams"][tid] = team; save_state(state)
-                        st.success(f"Borrowed {fmt(amt)} from {bk['name']}"); st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="bank-grid">', unsafe_allow_html=True)
+    for bk_id, bk in BANKS.items():
+        bank_bal = team.get(f"loan_{bk_id}", 0)
+        used_pct = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
+        available = max(0, bk["cap"] - bank_bal)
+        is_open = st.session_state["bank_open"] == bk_id
+        chevron_cls = "bk-chevron open" if is_open else "bk-chevron"
+        st.markdown(f"""
+        <div class="bank-card {bk['css']}" style="border-radius:{'12px 12px 0 0' if is_open else '12px'}">
+          <div class="bk-name">{bk['name']} <span class="{chevron_cls}">▾</span></div>
+          <div class="bk-rate">{bk['rate_label']}</div>
+          <div class="bk-limit">Limit: {fmt(bk['cap'])} · Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
+          <div class="bk-note">{bk['note']}</div>
+        </div>""", unsafe_allow_html=True)
+
+        # Toggle button (invisible, full-width, sits over the card visually)
+        toggle_key = f"bank_toggle_{bk_id}"
+        st.markdown(f'<style>div[data-testid="element-container"]:has(button[kind="secondary"][data-testid="{toggle_key}"]) button {{ position:relative;margin-top:-80px;height:80px;width:100%;background:transparent !important;border:none !important;color:transparent !important;cursor:pointer !important;z-index:10; }}</style>', unsafe_allow_html=True)
+        if st.button(" ", key=toggle_key, use_container_width=True):
+            st.session_state["bank_open"] = bk_id if not is_open else None
+            st.rerun()
+
+        # Accordion content
+        if is_open:
+            st.markdown('<div class="bank-accordion-inner">', unsafe_allow_html=True)
+            if not can_bank:
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.35);padding:4px 0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
+            elif available <= 0:
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);padding:4px 0">Credit limit reached for this bank.</p>', unsafe_allow_html=True)
+            else:
+                valid_amts = [a for a in bk["borrow_options"] if a <= available]
+                if valid_amts:
+                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:10px">Choose amount to borrow:</p>', unsafe_allow_html=True)
+                    bcols = st.columns(len(valid_amts))
+                    for i, amt in enumerate(valid_amts):
+                        with bcols[i]:
+                            st.markdown('<div class="loan-btn">', unsafe_allow_html=True)
+                            if st.button(fmt(amt), key=f"borrow_{bk_id}_{amt}", use_container_width=True):
+                                state = load_state(); team = state["teams"][tid]
+                                team["cash"] = team.get("cash", 0) + amt
+                                team["loan_balance"] = team.get("loan_balance", 0) + amt
+                                team[f"loan_{bk_id}"] = team.get(f"loan_{bk_id}", 0) + amt
+                                state["teams"][tid] = team; save_state(state)
+                                st.session_state["bank_open"] = None
+                                st.success(f"Borrowed {fmt(amt)} from {bk['name']}"); st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25)">No valid borrow amounts available.</p>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
     if phase == "between" and loan_balance > 0:
         st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:20px 0 8px">Repay now to reduce interest before next round:</p>', unsafe_allow_html=True)
         repay_options = []
