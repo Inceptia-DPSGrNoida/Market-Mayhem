@@ -1,16 +1,13 @@
-"""
-music_player.py — Background music helper for Market Mayhem
-Serves the MP3 via a base64 data URI embedded in a hidden <audio> element.
-Call inject_music(phase, volume) from any page. Music plays only on:
-  lobby, between (break), ended (thank-you screen).
-Fades in/out over 1.3 seconds.
-"""
-
 import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 
-_MUSIC_FILE = Path(__file__).parent / "solarflex-soft-background-music-515502.mp3"
+_MP3_NAME = "solarflex-soft-background-music-515502.mp3"
+_here = Path(__file__).parent
+_MUSIC_FILE = next(
+    (p for p in [_here / _MP3_NAME, _here.parent / _MP3_NAME] if p.exists()),
+    _here / _MP3_NAME  # fallback (will fail silently below)
+)
 _cached_b64: str | None = None
 
 def _get_b64() -> str:
