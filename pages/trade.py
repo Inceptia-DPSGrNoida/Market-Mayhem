@@ -284,13 +284,33 @@ body.light-mode .nl-rumour  { background:rgba(160,80,0,0.1);  color:#8b4000; bor
 body.light-mode .nl-event   { background:rgba(160,0,30,0.08); color:#a0001e; border-color:rgba(160,0,30,0.2); }
 body.light-mode .nl-custom  { background:rgba(160,120,0,0.1); color:#7a5c00; border-color:rgba(160,120,0,0.25); }
 
-/* Header text */
+/* Header text in light mode */
 body.light-mode #mm-gear-btn { background:rgba(0,60,0,0.07) !important; border-color:rgba(0,60,0,0.2) !important; color:#1a3a1a !important; }
-body.light-mode [style*="color:#fff"],
-body.light-mode [style*="color: #fff"] { color:#0d2e0d !important; }
-body.light-mode [style*="color:rgba(255,255,255,0.3)"],
-body.light-mode [style*="color:rgba(255,255,255,0.25)"],
-body.light-mode [style*="color:rgba(255,255,255,0.35)"] { color:#4a6a4a !important; }
+
+/* Override ALL inline white/grey text in the header area */
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:#fff"],
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color: #fff"] { color:#0d2e0d !important; }
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:rgba(255,255,255,0.3)"],
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:rgba(255,255,255,0.25)"],
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:rgba(255,255,255,0.35)"],
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:rgba(255,255,255,0.45)"],
+body.light-mode [data-testid="stMarkdownContainer"] div[style*="color:rgba(255,255,255,0.4)"],
+body.light-mode [data-testid="stMarkdownContainer"] span[style*="color:rgba(255,255,255"] { color:#4a6a4a !important; }
+
+/* Team name specifically */
+body.light-mode [style*="font-size:26px"][style*="font-weight:700"] { color:#0d2e0d !important; }
+body.light-mode [style*="font-size:12px"][style*="color:rgba(255,255,255,0.3)"] { color:#4a6a4a !important; }
+body.light-mode [style*="font-size:12px"][style*="color:rgba(255,255,255,0.25)"] { color:#4a6a4a !important; }
+
+/* "Trading is closed" and similar status text */
+body.light-mode [style*="color:rgba(255,255,255,0.3)"] { color:#5a7a5a !important; }
+
+/* Buy/sell panel backgrounds in light mode */
+body.light-mode [style*="background:#0d0f1a"][style*="border:1px solid #1e2535"] {
+  background:#f8fbf8 !important; border-color:#c2d9c2 !important;
+}
+body.light-mode [style*="font-size:10px"][style*="color:rgba(255,255,255,0.3)"] { color:#4a6a4a !important; }
+body.light-mode [style*="font-size:11px"][style*="color:rgba(255,255,255"] { color:#4a6a4a !important; }
 
 /* Streamlit-injected elements */
 body.light-mode [data-testid="stMarkdownContainer"] p { color:#1a2e1a; }
@@ -870,9 +890,18 @@ if active == "market":
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
             df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
+            _is_light = st.session_state.get("light_mode", False)
+            _label_col = "rgba(30,60,30,0.7)"  if _is_light else "rgba(255,255,255,0.35)"
+            _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
+            _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
             chart = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2).encode(
                 x=alt.X("i:Q", axis=None),
-                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=alt.Axis(grid=True, gridColor="rgba(255,255,255,0.05)", labelColor="rgba(255,255,255,0.3)", tickCount=4, format=",.0f")),
+                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col,
+                                      labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col,
+                                      tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)),
             ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
