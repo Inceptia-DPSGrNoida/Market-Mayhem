@@ -1,12 +1,12 @@
 """
 music_player.py — Background music for Market Mayhem
-Injects a persistent <audio> element into the parent Streamlit page.
-Music plays only during: lobby, between (break), ended (thank-you).
-Fades in/out over 1.3 seconds.
-Place this file and the .mp3 in the same folder (root or pages/).
+Strategy: serve the MP3 via st.audio (hidden), control play/pause via JS.
+Music plays only during: lobby, between, ended phases.
+1.3s fade in/out.
 """
-
-import base64, streamlit.components.v1 as components
+import streamlit as st
+import streamlit.components.v1 as components
+import base64
 from pathlib import Path
 from functools import lru_cache
 
@@ -25,30 +25,59 @@ MUSIC_PHASES = {"lobby", "between", "ended"}
 def inject_music(phase: str, volume: int = 50):
     b64 = _get_b64()
     if not b64:
-        return  # MP3 not found — fail silently
+        return
 
     should_play = phase in MUSIC_PHASES
     vol = max(0.0, min(1.0, volume / 100))
+    should_js  = "true" if should_play else "false"
 
-    components.html(f"""<!DOCTYPE html>
-<html><body style="margin:0;padding:0;overflow:hidden;background:transparent">
+    # Inject a real <audio> into the page via components.html (height=1 keeps iframe alive)
+    # The audio src is a data URI so no server route needed
+    components.html(f"""
+<!DOCTYPE html><html>
+<body style="margin:0;padding:0;background:transparent;overflow:hidden">
 <script>
 (function() {{
-  var P   = window.parent.document;
-  var vol = {vol:.3f};
-  var shouldPlay = {'true' if should_play else 'false'};
-  var FADE = 1300;
-  var STEPS = 40;
-  var INTERVAL = FADE / STEPS;
+  var P = window.parent.document;
+  var FADE = 1300, STEPS = 40, INTERVAL = FADE / STEPS;
+  var targetVol = {vol:.3f};
+  var shouldPlay = {should_js};
+
+  function getAudio() {{
+    return P.getElementById('mm-bg-audio');
+  }}
+
+  function createAudio() {{
+    var a = P.createElement('audio');
+    a.id = 'mm-bg-audio';
+    a.loop = true;
+    a.preload = 'auto';
+    a.volume = 0;
+    // Use blob URL to avoid CSP issues with data URIs
+    var b64 = "{b64}";
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var blob = new Blob([bytes], {{type: 'audio/mpeg'}});
+    a.src = URL.createObjectURL(blob);
+    P.body.appendChild(a);
+    return a;
+  }}
 
   function fadeIn(audio) {{
     audio.volume = 0;
-    if (audio.paused) audio.play().catch(function(){{}});
+    audio.play().catch(function(e) {{
+      // Autoplay blocked — add one-time click listener to parent
+      P.addEventListener('click', function handler() {{
+        audio.play().catch(function(){{}});
+        P.removeEventListener('click', handler);
+      }});
+    }});
     var step = 0;
     var t = setInterval(function() {{
       step++;
-      audio.volume = Math.min(vol, (step / STEPS) * vol);
-      if (step >= STEPS) {{ audio.volume = vol; clearInterval(t); }}
+      audio.volume = Math.min(targetVol, (step / STEPS) * targetVol);
+      if (step >= STEPS) {{ audio.volume = targetVol; clearInterval(t); }}
     }}, INTERVAL);
   }}
 
@@ -62,27 +91,15 @@ def inject_music(phase: str, volume: int = 50):
     }}, INTERVAL);
   }}
 
-  function setupAudio() {{
-    var audio = P.getElementById('mm-bg-audio');
-
-    if (!audio) {{
-      audio = P.createElement('audio');
-      audio.id  = 'mm-bg-audio';
-      audio.loop = true;
-      audio.preload = 'auto';
-      audio.volume  = 0;
-      var src = P.createElement('source');
-      src.src  = 'data:audio/mpeg;base64,{b64}';
-      src.type = 'audio/mpeg';
-      audio.appendChild(src);
-      P.body.appendChild(audio);
-    }}
+  function sync() {{
+    var audio = getAudio() || createAudio();
 
     if (shouldPlay) {{
       if (audio.paused) {{
         fadeIn(audio);
       }} else {{
-        audio.volume = vol;
+        // Just update volume smoothly
+        audio.volume = targetVol;
       }}
     }} else {{
       if (!audio.paused) {{
@@ -91,11 +108,13 @@ def inject_music(phase: str, volume: int = 50):
     }}
   }}
 
-  try {{
-    setupAudio();
-  }} catch(e) {{
-    setTimeout(setupAudio, 300);
+  // Wait for parent DOM to be ready
+  if (P.readyState === 'complete' || P.readyState === 'interactive') {{
+    sync();
+  }} else {{
+    P.addEventListener('DOMContentLoaded', sync);
   }}
 }})();
 </script>
-</body></html>""", height=1)
+</body></html>
+""", height=1)
