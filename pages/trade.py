@@ -321,9 +321,9 @@ div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
 """, unsafe_allow_html=True)
 
 BANKS = {
-    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "min_borrow":5000,  "max_borrow":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates.",  "borrow_options":[5000,10000,25000,50000]},
-    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "min_borrow":40000, "max_borrow":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams.", "borrow_options":[40000,60000,80000,100000]},
-    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "min_borrow":90000, "max_borrow":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted.", "borrow_options":[90000,120000,160000,200000]},
+    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates.",             "borrow_options":[5000,10000,25000,50000]},
+    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams.",           "borrow_options":[10000,25000,50000,75000,100000]},
+    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted.", "borrow_options":[25000,50000,100000,150000,200000]},
 }
 
 def fmt(n): return f"₹{int(n):,}"
@@ -406,61 +406,57 @@ state = load_state()
 team = state["teams"].get(tid)
 phase = state["phase"]
 
-# ── Music ─────────────────────────────────────────────────────────────────────
+# ── Music — served from /app/static/music.mp3, no base64 encoding ─────────────
 _MUSIC_PHASES = {"lobby", "between", "ended"}
-_music_vol  = st.session_state.get("music_volume", 50)
+_music_vol   = st.session_state.get("music_volume", 50)
 _should_play = phase in _MUSIC_PHASES
+_vol_f       = max(0.0, min(1.0, _music_vol / 100))
 
-if "music_b64" not in st.session_state:
-    import base64 as _b64
-    for _p in [Path(__file__).parent / "music.mp3", Path(__file__).parent.parent / "music.mp3"]:
-        if _p.exists():
-            st.session_state["music_b64"] = _b64.b64encode(_p.read_bytes()).decode()
-            break
-    else:
-        st.session_state["music_b64"] = ""
-
-_mb64 = st.session_state["music_b64"]
-
-if _mb64:
-    _vol_f = max(0.0, min(1.0, _music_vol / 100))
-    # Step 1: inject <audio> tag directly into the Streamlit page (st.markdown allows audio tags)
-    st.markdown(f"""
-    <audio id="mm-audio" loop preload="auto" style="display:none">
-      <source src="data:audio/mpeg;base64,{_mb64}" type="audio/mpeg">
-    </audio>""", unsafe_allow_html=True)
-
-    # Step 2: control it from components.html (scripts run here, not in st.markdown)
-    import streamlit.components.v1 as _stc_music
-    _stc_music.html(f"""<script>
+import streamlit.components.v1 as _stc_music
+_stc_music.html(f"""<script>
 (function(){{
   var P = window.parent.document;
   var shouldPlay = {'true' if _should_play else 'false'};
   var vol = {_vol_f:.3f};
-  var STEPS = 40, INTERVAL = 32;
+  var FADE_STEPS = 52, FADE_INTERVAL = 25;  // 1.3s fade
 
   function fade(a, to, cb) {{
-    var from = a.volume, step = 0;
     clearInterval(a._ft);
+    var from = a.volume, step = 0;
     a._ft = setInterval(function() {{
       step++;
-      a.volume = Math.max(0, Math.min(1, from + (to - from) * (step / STEPS)));
-      if (step >= STEPS) {{ a.volume = to; clearInterval(a._ft); if (cb) cb(); }}
-    }}, INTERVAL);
+      a.volume = Math.max(0, Math.min(1, from + (to - from) * (step / FADE_STEPS)));
+      if (step >= FADE_STEPS) {{ a.volume = to; clearInterval(a._ft); if (cb) cb(); }}
+    }}, FADE_INTERVAL);
+  }}
+
+  function getOrCreateAudio() {{
+    var a = P.getElementById('mm-audio');
+    if (!a) {{
+      a = P.createElement('audio');
+      a.id = 'mm-audio';
+      a.loop = true;
+      a.preload = 'auto';
+      a.style.display = 'none';
+      var src = P.createElement('source');
+      src.src = '/app/static/music.mp3';
+      src.type = 'audio/mpeg';
+      a.appendChild(src);
+      P.body.appendChild(a);
+    }}
+    return a;
   }}
 
   function tryPlay(a) {{
     a.volume = 0;
     a.play().then(function() {{ fade(a, vol); }}).catch(function() {{
-      // Autoplay blocked — attach one-time click handler on the page
       var handler = function() {{
         a.play().then(function() {{ fade(a, vol); }}).catch(function(){{}});
         P.removeEventListener('click', handler);
-        var btn = P.getElementById('mm-play-hint');
-        if (btn) btn.remove();
+        var hint = P.getElementById('mm-play-hint');
+        if (hint) hint.remove();
       }};
       P.addEventListener('click', handler);
-      // Show hint if not already there
       if (!P.getElementById('mm-play-hint')) {{
         var hint = P.createElement('div');
         hint.id = 'mm-play-hint';
@@ -468,25 +464,24 @@ if _mb64:
         hint.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);' +
           'background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.3);' +
           'color:#00C896;font-size:13px;font-family:Inter,sans-serif;font-weight:500;' +
-          'padding:8px 18px;border-radius:99px;z-index:9997;pointer-events:none;' +
-          'box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+          'padding:8px 18px;border-radius:99px;z-index:9997;pointer-events:none;';
         P.body.appendChild(hint);
       }}
     }});
   }}
 
   function sync() {{
-    var a = P.getElementById('mm-audio');
-    if (!a) {{ setTimeout(sync, 200); return; }}
+    var a = getOrCreateAudio();
     if (shouldPlay) {{
       if (a.paused) {{ tryPlay(a); }}
-      else {{ a.volume = vol; }}
+      else if (Math.abs(a.volume - vol) > 0.01) {{ fade(a, vol); }}
     }} else {{
       if (!a.paused) {{ fade(a, 0, function() {{ a.pause(); }}); }}
     }}
   }}
 
-  sync();
+  // Small delay so audio element settles in DOM
+  setTimeout(sync, 300);
 }})();
 </script>""", height=0)
 
@@ -1073,8 +1068,8 @@ elif active == "loans":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # Invisible Streamlit button — only exists so clicking it causes a rerun
-        st.markdown('<div class="bk-trigger">', unsafe_allow_html=True)
+        # Invisible Streamlit button — hidden visually, click relay only
+        st.markdown('<div class="bk-trigger" style="height:0;overflow:hidden;margin:0;padding:0">', unsafe_allow_html=True)
         if st.button("x", key=btn_key):
             st.session_state["bank_open"] = bk_id if not is_open else None
             st.rerun()
