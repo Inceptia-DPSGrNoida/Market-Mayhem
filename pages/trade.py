@@ -406,106 +406,89 @@ state = load_state()
 team = state["teams"].get(tid)
 phase = state["phase"]
 
-# ── Music — direct implementation, no external file needed ────────────────────
+# ── Music ─────────────────────────────────────────────────────────────────────
 _MUSIC_PHASES = {"lobby", "between", "ended"}
-_music_vol = st.session_state.get("music_volume", 50)
+_music_vol  = st.session_state.get("music_volume", 50)
 _should_play = phase in _MUSIC_PHASES
 
-# Find MP3 once and cache the path
-if "music_src_url" not in st.session_state:
+if "music_b64" not in st.session_state:
     import base64 as _b64
-    _mp3_name = "music.mp3"
-    _mp3_candidates = [
-        Path(__file__).parent / _mp3_name,
-        Path(__file__).parent.parent / _mp3_name,
-    ]
-    _mp3_path = next((p for p in _mp3_candidates if p.exists()), None)
-    if _mp3_path:
-        _b64_data = _b64.b64encode(_mp3_path.read_bytes()).decode()
-        st.session_state["music_src_url"] = f"data:audio/mpeg;base64,{_b64_data}"
+    for _p in [Path(__file__).parent / "music.mp3", Path(__file__).parent.parent / "music.mp3"]:
+        if _p.exists():
+            st.session_state["music_b64"] = _b64.b64encode(_p.read_bytes()).decode()
+            break
     else:
-        st.session_state["music_src_url"] = None
+        st.session_state["music_b64"] = ""
 
-_music_url = st.session_state.get("music_src_url")
+_mb64 = st.session_state["music_b64"]
 
-if _music_url:
-    import streamlit.components.v1 as _stc_music
+if _mb64:
     _vol_f = max(0.0, min(1.0, _music_vol / 100))
-    _stc_music.html(f"""<!DOCTYPE html><html>
-<body style="margin:0;padding:0;overflow:hidden;background:transparent">
-<script>
+    # Step 1: inject <audio> tag directly into the Streamlit page (st.markdown allows audio tags)
+    st.markdown(f"""
+    <audio id="mm-audio" loop preload="auto" style="display:none">
+      <source src="data:audio/mpeg;base64,{_mb64}" type="audio/mpeg">
+    </audio>""", unsafe_allow_html=True)
+
+    # Step 2: control it from components.html (scripts run here, not in st.markdown)
+    import streamlit.components.v1 as _stc_music
+    _stc_music.html(f"""<script>
 (function(){{
   var P = window.parent.document;
   var shouldPlay = {'true' if _should_play else 'false'};
-  var targetVol  = {_vol_f:.3f};
-  var STEPS = 40, INTERVAL = 32; // 1.3s fade
+  var vol = {_vol_f:.3f};
+  var STEPS = 40, INTERVAL = 32;
 
-  function fade(audio, toVol, cb) {{
-    var from = audio.volume, step = 0;
-    clearInterval(audio._ft);
-    audio._ft = setInterval(function() {{
+  function fade(a, to, cb) {{
+    var from = a.volume, step = 0;
+    clearInterval(a._ft);
+    a._ft = setInterval(function() {{
       step++;
-      audio.volume = Math.max(0, Math.min(1, from + (toVol - from) * step / STEPS));
-      if (step >= STEPS) {{ audio.volume = toVol; clearInterval(audio._ft); if (cb) cb(); }}
+      a.volume = Math.max(0, Math.min(1, from + (to - from) * (step / STEPS)));
+      if (step >= STEPS) {{ a.volume = to; clearInterval(a._ft); if (cb) cb(); }}
     }}, INTERVAL);
   }}
 
-  function getOrCreate() {{
-    var a = P.getElementById('mm-audio');
-    if (!a) {{
-      a = P.createElement('audio');
-      a.id = 'mm-audio'; a.loop = true; a.volume = 0;
-      a.src = "{_music_url}";
-      P.body.appendChild(a);
-
-      // Show a small persistent play button if autoplay is blocked
-      var btn = P.createElement('div');
-      btn.id = 'mm-play-btn';
-      btn.title = 'Enable music';
-      btn.innerHTML = '🎵';
-      btn.style.cssText = 'position:fixed;bottom:18px;left:18px;z-index:9997;' +
-        'width:38px;height:38px;border-radius:50%;' +
-        'background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.3);' +
-        'display:flex;align-items:center;justify-content:center;' +
-        'cursor:pointer;font-size:16px;transition:background 0.2s;' +
-        'box-shadow:0 2px 12px rgba(0,0,0,0.3)';
-      btn.onclick = function() {{
-        a.play().then(function() {{
-          fade(a, targetVol);
-          btn.style.display = 'none';
-        }}).catch(function(){{}});
+  function tryPlay(a) {{
+    a.volume = 0;
+    a.play().then(function() {{ fade(a, vol); }}).catch(function() {{
+      // Autoplay blocked — attach one-time click handler on the page
+      var handler = function() {{
+        a.play().then(function() {{ fade(a, vol); }}).catch(function(){{}});
+        P.removeEventListener('click', handler);
+        var btn = P.getElementById('mm-play-hint');
+        if (btn) btn.remove();
       }};
-      P.body.appendChild(btn);
-    }}
-    return a;
+      P.addEventListener('click', handler);
+      // Show hint if not already there
+      if (!P.getElementById('mm-play-hint')) {{
+        var hint = P.createElement('div');
+        hint.id = 'mm-play-hint';
+        hint.textContent = '🎵 Tap anywhere to enable music';
+        hint.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);' +
+          'background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.3);' +
+          'color:#00C896;font-size:13px;font-family:Inter,sans-serif;font-weight:500;' +
+          'padding:8px 18px;border-radius:99px;z-index:9997;pointer-events:none;' +
+          'box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+        P.body.appendChild(hint);
+      }}
+    }});
   }}
 
   function sync() {{
-    var a = getOrCreate();
-    var btn = P.getElementById('mm-play-btn');
+    var a = P.getElementById('mm-audio');
+    if (!a) {{ setTimeout(sync, 200); return; }}
     if (shouldPlay) {{
-      if (a.paused) {{
-        a.play().then(function() {{
-          if (btn) btn.style.display = 'none';
-          fade(a, targetVol);
-        }}).catch(function() {{
-          // Autoplay blocked — show the 🎵 button
-          if (btn) btn.style.display = 'flex';
-        }});
-      }} else {{
-        a.volume = targetVol;
-      }}
+      if (a.paused) {{ tryPlay(a); }}
+      else {{ a.volume = vol; }}
     }} else {{
-      if (!a.paused) {{
-        fade(a, 0, function() {{ a.pause(); }});
-      }}
-      if (btn) btn.style.display = 'none';
+      if (!a.paused) {{ fade(a, 0, function() {{ a.pause(); }}); }}
     }}
   }}
 
   sync();
 }})();
-</script></body></html>""", height=1)
+</script>""", height=0)
 
 # ── Live micro-fluctuation engine ────────────────────────────────────────────
 # Real prices only change at round start (host). This adds visual micro-ticks
@@ -1031,9 +1014,9 @@ elif active == "loans":
     .bk-s .bk-hrate { color:#00C896; }
     .bk-m .bk-hrate { color:#ffd93d; }
     .bk-r .bk-hrate { color:#FF4D6A; }
-    /* hide the trigger button — invisible but still JS-clickable */
-    .bk-trigger { height:0 !important; overflow:hidden !important; margin:0 !important; padding:0 !important; }
-    .bk-trigger button { opacity:0 !important; position:absolute !important; width:1px !important; height:1px !important; pointer-events:none !important; }
+    /* Invisible overlay button that covers the card */
+    .bk-trigger { position:relative; margin-bottom:12px; }
+    .bk-trigger button { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; border:none !important; background:transparent !important; z-index:5 !important; margin:0 !important; padding:0 !important; min-height:unset !important; }
     /* light mode */
     body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
     body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
