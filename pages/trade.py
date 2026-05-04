@@ -406,11 +406,28 @@ state = load_state()
 team = state["teams"].get(tid)
 phase = state["phase"]
 
-# ── Music — served from /app/static/music.mp3, no base64 encoding ─────────────
+# ── Music — loaded once into session state, played via JS in parent frame ─────
 _MUSIC_PHASES = {"lobby", "between", "ended"}
 _music_vol   = st.session_state.get("music_volume", 50)
 _should_play = phase in _MUSIC_PHASES
 _vol_f       = max(0.0, min(1.0, _music_vol / 100))
+
+# Load MP3 as base64 once per session (not stored in .py source, loaded at runtime)
+if "mm_music_src" not in st.session_state:
+    import base64 as _b64
+    _tried = [
+        Path(__file__).parent.parent / "static" / "music.mp3",
+        Path(__file__).parent / "music.mp3",
+        Path(__file__).parent.parent / "music.mp3",
+    ]
+    st.session_state["mm_music_src"] = ""
+    for _mp in _tried:
+        if _mp.exists():
+            _enc = _b64.b64encode(_mp.read_bytes()).decode()
+            st.session_state["mm_music_src"] = f"data:audio/mpeg;base64,{_enc}"
+            break
+
+_music_src = st.session_state.get("mm_music_src", "")
 
 import streamlit.components.v1 as _stc_music
 _stc_music.html(f"""<script>
@@ -418,7 +435,8 @@ _stc_music.html(f"""<script>
   var P = window.parent.document;
   var shouldPlay = {'true' if _should_play else 'false'};
   var vol = {_vol_f:.3f};
-  var FADE_STEPS = 52, FADE_INTERVAL = 25;  // 1.3s fade
+  var src = {repr(_music_src)};
+  var FADE_STEPS = 52, FADE_INTERVAL = 25; // 1.3s fade
 
   function fade(a, to, cb) {{
     clearInterval(a._ft);
@@ -431,23 +449,19 @@ _stc_music.html(f"""<script>
   }}
 
   function getOrCreateAudio() {{
-    var a = P.getElementById('mm-audio');
-    if (!a) {{
+    var a = P.getElementById('mm-bg-audio');
+    if (!a && src) {{
       a = P.createElement('audio');
-      a.id = 'mm-audio';
-      a.loop = true;
-      a.preload = 'auto';
-      a.style.display = 'none';
-      var src = P.createElement('source');
-      src.src = '/app/static/music.mp3';
-      src.type = 'audio/mpeg';
-      a.appendChild(src);
+      a.id = 'mm-bg-audio';
+      a.loop = true; a.preload = 'auto'; a.style.display = 'none';
+      a.src = src;
       P.body.appendChild(a);
     }}
     return a;
   }}
 
   function tryPlay(a) {{
+    if (!a) return;
     a.volume = 0;
     a.play().then(function() {{ fade(a, vol); }}).catch(function() {{
       var handler = function() {{
@@ -472,16 +486,18 @@ _stc_music.html(f"""<script>
 
   function sync() {{
     var a = getOrCreateAudio();
+    if (!a) return;
     if (shouldPlay) {{
       if (a.paused) {{ tryPlay(a); }}
-      else if (Math.abs(a.volume - vol) > 0.01) {{ fade(a, vol); }}
+      else {{ fade(a, vol); }}
     }} else {{
       if (!a.paused) {{ fade(a, 0, function() {{ a.pause(); }}); }}
     }}
+    // Keep volume in sync with slider
+    a._targetVol = vol;
   }}
 
-  // Small delay so audio element settles in DOM
-  setTimeout(sync, 300);
+  setTimeout(sync, 200);
 }})();
 </script>""", height=0)
 
@@ -630,17 +646,15 @@ _stc.html(f"""
       .mm-sph-x:hover {{ background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }}
       .mm-ssec {{ margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }}
       .mm-slbl {{ font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }}
-      .mm-stog {{ display:flex;align-items:center;justify-content:space-between;padding:11px 13px;
-                  border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-                  cursor:pointer;transition:background .15s;user-select:none; }}
-      .mm-stog:hover {{ background:rgba(255,255,255,0.07); }}
-      .mm-stog-txt {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500; }}
-      .mm-spill {{ width:38px;height:21px;border-radius:11px;background:rgba(255,255,255,0.1);
-                   position:relative;transition:background .2s;flex-shrink:0; }}
-      .mm-spill.on {{ background:#00C896; }}
-      .mm-spill::after {{ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
-                          border-radius:50%;background:#fff;transition:transform .2s; }}
-      .mm-spill.on::after {{ transform:translateX(17px); }}
+      .mm-theme-row {{ display:flex;gap:10px; }}
+      .mm-tbtn {{ flex:1;padding:14px 8px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:all 0.18s;user-select:none; }}
+      .mm-tbtn:hover {{ background:rgba(255,255,255,0.08); }}
+      .mm-tbtn.t-active-light {{ border-color:#ffd93d;background:rgba(255,211,61,0.1); }}
+      .mm-tbtn.t-active-dark  {{ border-color:#a78bfa;background:rgba(167,139,250,0.1); }}
+      .mm-tbtn svg {{ width:28px;height:28px; }}
+      .mm-tbtn span {{ font-size:12px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.3px; }}
+      .mm-tbtn.t-active-light span {{ color:#ffd93d; }}
+      .mm-tbtn.t-active-dark  span {{ color:#a78bfa; }}
       .mm-svlbl {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
       .mm-svrow {{ display:flex;align-items:center;gap:10px; }}
       .mm-svrow input[type=range] {{
@@ -660,6 +674,9 @@ _stc.html(f"""
   var isLight = {'true' if _light else 'false'};
   var vol = {_vol};
 
+  var SVG_SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd93d" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var SVG_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
   if (!P.getElementById('mm-spanel')) {{
     var ov = P.createElement('div'); ov.id = 'mm-soverlay';
     var pn = P.createElement('div'); pn.id = 'mm-spanel';
@@ -670,9 +687,13 @@ _stc.html(f"""
       '</div>' +
       '<div class="mm-ssec">' +
         '<div class="mm-slbl">Appearance</div>' +
-        '<div class="mm-stog" id="mm-stog">' +
-          '<span class="mm-stog-txt" id="mm-stxt">' + (isLight ? '&#x1F319; Dark mode' : '&#x2600;&#xFE0F; Light mode') + '</span>' +
-          '<div class="mm-spill' + (isLight ? ' on' : '') + '" id="mm-spill"></div>' +
+        '<div class="mm-theme-row">' +
+          '<div class="mm-tbtn ' + (!isLight ? '' : 't-active-light') + '" id="mm-btn-light">' +
+            SVG_SUN + '<span>Light</span>' +
+          '</div>' +
+          '<div class="mm-tbtn ' + (isLight ? '' : 't-active-dark') + '" id="mm-btn-dark">' +
+            SVG_MOON + '<span>Dark</span>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="mm-ssec" style="border-bottom:none">' +
@@ -701,14 +722,16 @@ _stc.html(f"""
       else   {{ setTimeout(tryGear, 150); }}
     }})();
 
-    // Theme toggle
-    P.getElementById('mm-stog').addEventListener('click', function() {{
-      isLight = !isLight;
-      P.getElementById('mm-spill').classList.toggle('on', isLight);
-      P.getElementById('mm-stxt').innerHTML = isLight ? '&#x1F319; Dark mode' : '&#x2600;&#xFE0F; Light mode';
-      if (isLight) P.body.classList.add('light-mode');
-      else P.body.classList.remove('light-mode');
-    }});
+    // Sun/Moon theme buttons
+    function setTheme(light) {{
+      isLight = light;
+      P.getElementById('mm-btn-light').className = 'mm-tbtn' + (light ? ' t-active-light' : '');
+      P.getElementById('mm-btn-dark').className  = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
+      if (light) P.body.classList.add('light-mode');
+      else       P.body.classList.remove('light-mode');
+    }}
+    P.getElementById('mm-btn-light').addEventListener('click', function() {{ setTheme(true);  }});
+    P.getElementById('mm-btn-dark').addEventListener('click',  function() {{ setTheme(false); }});
 
     // Volume slider
     P.getElementById('mm-vol-sl').addEventListener('input', function() {{
@@ -1068,8 +1091,8 @@ elif active == "loans":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # Invisible Streamlit button — hidden visually, click relay only
-        st.markdown('<div class="bk-trigger" style="height:0;overflow:hidden;margin:0;padding:0">', unsafe_allow_html=True)
+        # Zero-size absolutely positioned container — truly invisible, no X shown
+        st.markdown('<div style="position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none">', unsafe_allow_html=True)
         if st.button("x", key=btn_key):
             st.session_state["bank_open"] = bk_id if not is_open else None
             st.rerun()
