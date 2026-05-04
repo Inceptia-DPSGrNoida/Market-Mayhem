@@ -170,17 +170,143 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .gameover-screen h1 span { color:#00C896; }
 .gameover-screen p { font-size:18px; color:rgba(255,255,255,0.4); max-width:500px; margin:0 auto; line-height:1.7; }
 
-/* Light mode overrides */
-body.light-mode { background:#f0f2f5 !important; }
-body.light-mode .ticker-wrap { background:#e8eaf0; border-color:#d0d4e0; }
-body.light-mode .ticker-item { color:#555; }
-body.light-mode .ticker-item .sym { color:#111; }
-body.light-mode .company-card,body.light-mode .metric-card,body.light-mode .news-card,body.light-mode .bank-card,body.light-mode .loan-card,body.light-mode .port-card,body.light-mode .lb-card,body.light-mode .rule-card { background:#fff; border-color:#e0e4ef; }
-body.light-mode .company-name,body.light-mode .port-name,body.light-mode .lb-name,body.light-mode .rule-content h4,body.light-mode .bk-name { color:#0d0f1a; }
-body.light-mode .company-meta,body.light-mode .company-trait,body.light-mode .company-bio,body.light-mode .bk-limit,body.light-mode .bk-note,body.light-mode .port-qty { color:#666; }
-body.light-mode .price-main { color:#0d0f1a; }
-body.light-mode .value { color:#0d0f1a !important; }
-body.light-mode .section-hdr { color:#0d0f1a; border-color:#e0e4ef; }
+/* ═══════════════════════════════════════════════════════
+   LIGHT MODE — full off-white theme with dark-green accents
+   ═══════════════════════════════════════════════════════ */
+body.light-mode,
+body.light-mode [data-testid="stAppViewContainer"],
+body.light-mode [data-testid="stAppViewBlockContainer"],
+body.light-mode section.main,
+body.light-mode .block-container,
+body.light-mode [data-testid="column"],
+body.light-mode [data-testid="stVerticalBlock"] {
+  background: #f0f4f0 !important; color: #1a2e1a !important;
+}
+
+/* Ticker */
+body.light-mode .ticker-wrap { background:#d4e8d4; border-color:#a8cca8; }
+body.light-mode .ticker-item { color:#2d5a2d; }
+body.light-mode .ticker-item .sym { color:#0d2e0d; font-weight:800; }
+body.light-mode .ticker-item .up   { color:#006b3c; }
+body.light-mode .ticker-item .down { color:#c0392b; }
+
+/* Phase banners */
+body.light-mode .phase-lobby   { background:rgba(180,140,0,0.1); border-color:rgba(180,140,0,0.35); color:#7a5c00; }
+body.light-mode .phase-trading { background:rgba(0,120,70,0.08); border-color:rgba(0,120,70,0.3);  color:#005c32; }
+body.light-mode .phase-between { background:rgba(180,80,0,0.08); border-color:rgba(180,80,0,0.3);  color:#7a3800; }
+body.light-mode .phase-ended   { background:rgba(160,0,30,0.07); border-color:rgba(160,0,30,0.25); color:#8b0000; }
+
+/* All cards */
+body.light-mode .metric-card,
+body.light-mode .company-card,
+body.light-mode .news-card,
+body.light-mode .loan-card,
+body.light-mode .port-card,
+body.light-mode .lb-card,
+body.light-mode .rule-card {
+  background: #ffffff !important;
+  border-color: #c2d9c2 !important;
+  box-shadow: 0 1px 4px rgba(0,60,0,0.07);
+}
+
+/* Bank cards */
+body.light-mode .bank-safe  { background:#f5fff8 !important; border-color:rgba(0,120,70,0.4) !important; }
+body.light-mode .bank-mid   { background:#fffef0 !important; border-color:rgba(160,120,0,0.4) !important; }
+body.light-mode .bank-risky { background:#fff5f5 !important; border-color:rgba(180,0,30,0.35) !important; }
+body.light-mode .bank-card .bk-name { color:#0d2e0d !important; }
+body.light-mode .bank-safe  .bk-rate { color:#006b3c !important; }
+body.light-mode .bank-mid   .bk-rate { color:#7a5c00 !important; }
+body.light-mode .bank-risky .bk-rate { color:#a0001e !important; }
+body.light-mode .bank-card .bk-limit { color:#4a6a4a !important; }
+body.light-mode .bank-card .bk-note  { color:#7a947a !important; }
+body.light-mode .loan-card  { background:#f8f5ff !important; border-color:rgba(100,60,200,0.25) !important; }
+body.light-mode .loan-title { color:#5b3fa0 !important; }
+
+/* Text colours */
+body.light-mode .section-hdr           { color:#0d2e0d !important; border-color:#c2d9c2 !important; }
+body.light-mode .company-name,
+body.light-mode .port-name,
+body.light-mode .lb-name,
+body.light-mode .rule-content h4       { color:#0d2e0d !important; }
+body.light-mode .company-meta,
+body.light-mode .company-trait,
+body.light-mode .bk-limit,
+body.light-mode .bk-note,
+body.light-mode .port-qty,
+body.light-mode .rule-content p        { color:#4a6a4a !important; }
+body.light-mode .company-bio           { color:#3a5a3a !important; background:rgba(0,100,50,0.04); border-left-color:#a8cca8; }
+body.light-mode .news-text             { color:#1a2e1a !important; }
+body.light-mode .price-main            { color:#0d2e0d !important; }
+body.light-mode .metric-card .label   { color:#4a6a4a !important; }
+body.light-mode .metric-card .value,
+body.light-mode .port-stat .s-val,
+body.light-mode .lb-stat .ls2-val      { color:#0d2e0d !important; }
+body.light-mode .metric-card .delta.delta-neutral { color:#7a947a !important; }
+body.light-mode .lb-stat .ls2-label,
+body.light-mode .port-stat .s-label    { color:#7a947a !important; }
+body.light-mode .lb-nw                 { color:#006b3c !important; }
+body.light-mode .lb-rank               { color:rgba(0,60,0,0.15) !important; }
+body.light-mode .lb-rank.gold          { color:#b8860b !important; }
+body.light-mode .lb-rank.silver        { color:#708090 !important; }
+body.light-mode .lb-rank.bronze        { color:#8b5e3c !important; }
+body.light-mode .rule-num              { color:rgba(0,120,60,0.2) !important; }
+
+/* Nav buttons */
+body.light-mode .nav-btn { border-right-color:#c2d9c2 !important; }
+body.light-mode .nav-market  { background:rgba(0,120,70,0.07);  color:rgba(0,100,50,0.5); }
+body.light-mode .nav-intel   { background:rgba(160,120,0,0.07); color:rgba(130,90,0,0.5); }
+body.light-mode .nav-banks   { background:rgba(100,60,200,0.06);color:rgba(80,40,180,0.5); }
+body.light-mode .nav-portf   { background:rgba(30,80,200,0.06); color:rgba(20,60,180,0.5); }
+body.light-mode .nav-market.nav-active  { background:rgba(0,120,70,0.15);  color:#006b3c; }
+body.light-mode .nav-intel.nav-active   { background:rgba(160,120,0,0.15); color:#7a5c00; }
+body.light-mode .nav-banks.nav-active   { background:rgba(100,60,200,0.12);color:#4a24b0; }
+body.light-mode .nav-portf.nav-active   { background:rgba(30,80,200,0.12); color:#1a3ea0; }
+
+/* Nav row border */
+body.light-mode .nav-row { border-color:#c2d9c2 !important; }
+
+/* Buttons */
+body.light-mode .buy-btn  button { background:#d4f0e4 !important; border-color:#006b3c !important; color:#006b3c !important; }
+body.light-mode .sell-btn button { background:#fde8e8 !important; border-color:#c0392b !important; color:#c0392b !important; }
+body.light-mode .max-btn  button { background:#fef9e0 !important; border-color:#a08000 !important; color:#7a5c00 !important; }
+body.light-mode .loan-btn button { background:#ede8ff !important; border-color:#5b3fa0 !important; color:#5b3fa0 !important; }
+body.light-mode .repay-btn button{ background:#fde8e8 !important; border-color:#c0392b !important; color:#c0392b !important; }
+
+/* Risk badges */
+body.light-mode .risk-low         { background:rgba(0,120,70,0.1);  color:#006b3c; border-color:rgba(0,120,70,0.3); }
+body.light-mode .risk-medium      { background:rgba(160,120,0,0.1); color:#7a5c00; border-color:rgba(160,120,0,0.3); }
+body.light-mode .risk-high        { background:rgba(160,0,30,0.08); color:#a0001e; border-color:rgba(160,0,30,0.25); }
+body.light-mode .risk-medium-high { background:rgba(160,80,0,0.08); color:#8b4000; border-color:rgba(160,80,0,0.25); }
+
+/* News labels */
+body.light-mode .nl-insider { background:rgba(80,40,180,0.1); color:#4a24b0; border-color:rgba(80,40,180,0.25); }
+body.light-mode .nl-rumour  { background:rgba(160,80,0,0.1);  color:#8b4000; border-color:rgba(160,80,0,0.25); }
+body.light-mode .nl-event   { background:rgba(160,0,30,0.08); color:#a0001e; border-color:rgba(160,0,30,0.2); }
+body.light-mode .nl-custom  { background:rgba(160,120,0,0.1); color:#7a5c00; border-color:rgba(160,120,0,0.25); }
+
+/* Header text */
+body.light-mode #mm-gear-btn { background:rgba(0,60,0,0.07) !important; border-color:rgba(0,60,0,0.2) !important; color:#1a3a1a !important; }
+body.light-mode [style*="color:#fff"],
+body.light-mode [style*="color: #fff"] { color:#0d2e0d !important; }
+body.light-mode [style*="color:rgba(255,255,255,0.3)"],
+body.light-mode [style*="color:rgba(255,255,255,0.25)"],
+body.light-mode [style*="color:rgba(255,255,255,0.35)"] { color:#4a6a4a !important; }
+
+/* Streamlit-injected elements */
+body.light-mode [data-testid="stMarkdownContainer"] p { color:#1a2e1a; }
+body.light-mode div[data-testid="stHorizontalBlock"] { background:transparent !important; }
+body.light-mode [data-baseweb="base-input"] { background:#fff !important; border-color:#c2d9c2 !important; color:#0d2e0d !important; }
+body.light-mode [data-baseweb="base-input"] input { color:#0d2e0d !important; }
+body.light-mode button[kind="secondary"] { background:#fff !important; border-color:#c2d9c2 !important; color:#0d2e0d !important; }
+
+/* Settings panel in light mode */
+body.light-mode #mm-spanel { background:#f5faf5 !important; border-color:#c2d9c2 !important; }
+body.light-mode .mm-sph-title { color:#0d2e0d !important; }
+body.light-mode .mm-slbl { color:#4a6a4a !important; }
+body.light-mode .mm-stog { background:rgba(0,80,40,0.05) !important; border-color:#c2d9c2 !important; }
+body.light-mode .mm-stog-txt { color:#1a2e1a !important; }
+body.light-mode .mm-svlbl { color:#1a2e1a !important; }
+body.light-mode .mm-svval { color:#4a6a4a !important; }
 
 div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
     background: #0a4a35 !important; border: 1px solid #00C896 !important;
