@@ -928,63 +928,91 @@ elif active == "loans":
     if loan_balance > 0:
         st.markdown(f'<div class="loan-card"><div class="loan-title">Total Outstanding Loan</div><span style="font-size:28px;font-weight:700;font-family:Space Grotesk,monospace;color:#a78bfa">{fmt(loan_balance)}</span><div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:10px">Interest charged per bank at round-end.</div></div>', unsafe_allow_html=True)
 
+    st.markdown("""<style>
+    .bk-wrap { margin-bottom:12px; }
+    .bk-head { padding:22px 24px; cursor:pointer; transition:filter 0.15s; border-radius:14px; }
+    .bk-head.open { border-radius:14px 14px 0 0; }
+    .bk-head:hover { filter:brightness(1.12); }
+    .bk-head-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .bk-hname  { font-size:16px; font-weight:700; font-family:'Space Grotesk',sans-serif; color:#fff; }
+    .bk-hchev  { font-size:18px; color:rgba(255,255,255,0.4); transition:transform 0.25s; }
+    .bk-hrate  { font-size:28px; font-weight:800; font-family:'Space Grotesk',monospace; margin-bottom:8px; }
+    .bk-hmeta  { font-size:12px; color:rgba(255,255,255,0.45); margin-bottom:4px; }
+    .bk-hnote  { font-size:11px; color:rgba(255,255,255,0.25); font-style:italic; }
+    .bk-body   { padding:18px 24px; border-top:none; border-radius:0 0 14px 14px; }
+    .bk-s .bk-head { background:#0a1a14; border:1px solid rgba(0,200,150,0.3); }
+    .bk-m .bk-head { background:#18160a; border:1px solid rgba(255,217,61,0.3); }
+    .bk-r .bk-head { background:#1a0a0e; border:1px solid rgba(255,77,106,0.3); }
+    .bk-s .bk-body { background:#071210; border:1px solid rgba(0,200,150,0.2); }
+    .bk-m .bk-body { background:#121005; border:1px solid rgba(255,217,61,0.2); }
+    .bk-r .bk-body { background:#120508; border:1px solid rgba(255,77,106,0.2); }
+    .bk-s .bk-hrate { color:#00C896; }
+    .bk-m .bk-hrate { color:#ffd93d; }
+    .bk-r .bk-hrate { color:#FF4D6A; }
+    /* hide the trigger button completely */
+    .bk-trigger { position:absolute; width:0; height:0; overflow:hidden; opacity:0; pointer-events:none; }
+    /* light mode */
+    body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
+    body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
+    body.light-mode .bk-r .bk-head { background:#fff0f3; border-color:rgba(180,0,30,0.4); }
+    body.light-mode .bk-s .bk-body { background:#e8faf2; border-color:rgba(0,150,90,0.25); }
+    body.light-mode .bk-m .bk-body { background:#fdfae0; border-color:rgba(160,120,0,0.25); }
+    body.light-mode .bk-r .bk-body { background:#fde8ed; border-color:rgba(180,0,30,0.25); }
+    body.light-mode .bk-hname { color:#0d2e0d; }
+    body.light-mode .bk-hmeta { color:#4a6a4a; }
+    body.light-mode .bk-hnote { color:#7a947a; }
+    body.light-mode .bk-hchev { color:rgba(0,60,0,0.35); }
+    body.light-mode .bk-s .bk-hrate { color:#006b3c; }
+    body.light-mode .bk-m .bk-hrate { color:#7a5c00; }
+    body.light-mode .bk-r .bk-hrate { color:#a0001e; }
+    </style>""", unsafe_allow_html=True)
+
+    css_map = {"bank-safe": "bk-s", "bank-mid": "bk-m", "bank-risky": "bk-r"}
+
     for bk_id, bk in BANKS.items():
         bank_bal  = team.get(f"loan_{bk_id}", 0)
         used_pct  = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
         available = max(0, bk["cap"] - bank_bal)
         is_open   = st.session_state["bank_open"] == bk_id
+        cls       = css_map.get(bk["css"], "bk-s")
+        btn_key   = f"bk_btn_{bk_id}"
+        chev_rot  = "180deg" if is_open else "0deg"
 
-        # Border colours per bank
-        border_map = {"bank-safe": "rgba(0,200,150,0.35)", "bank-mid": "rgba(255,217,61,0.35)", "bank-risky": "rgba(255,77,106,0.35)"}
-        rate_color_map = {"bank-safe": "#00C896", "bank-mid": "#ffd93d", "bank-risky": "#FF4D6A"}
-        border_col = border_map.get(bk["css"], "rgba(255,255,255,0.1)")
-        rate_col   = rate_color_map.get(bk["css"], "#fff")
-        br_bottom  = "0 0 0 0" if is_open else "12px 12px 12px 12px"
-
-        # Style the Streamlit button to look exactly like the bank card
-        btn_key = f"bk_btn_{bk_id}"
-        chevron = "▴" if is_open else "▾"
+        # Full HTML card — clicking fires hidden Streamlit button via JS
         st.markdown(f"""
-        <style>
-        div[data-testid="stButton"] button[kind="secondary"][data-testid="{btn_key}"] {{
-          width:100% !important; text-align:left !important; height:auto !important;
-          padding:18px 20px !important; background:#0d0f1a !important;
-          border:1px solid {border_col} !important; border-radius:{br_bottom} !important;
-          white-space:pre-wrap !important; line-height:1.5 !important;
-          transition:transform 0.15s,box-shadow 0.15s !important;
-          font-family:inherit !important; cursor:pointer !important;
-          margin-bottom:0 !important;
-        }}
-        div[data-testid="stButton"] button[kind="secondary"][data-testid="{btn_key}"]:hover {{
-          transform:translateY(-1px) !important;
-          box-shadow:0 4px 20px rgba(0,0,0,0.3) !important;
-          border-color:{border_col.replace('0.35','0.6')} !important;
-        }}
-        </style>""", unsafe_allow_html=True)
+        <div class="bk-wrap {cls}" onclick="(function(){{
+          var b=document.querySelector('[data-testid=\\'{btn_key}\\']');
+          if(b)b.click();
+        }})()">
+          <div class="bk-head {'open' if is_open else ''}">
+            <div class="bk-head-top">
+              <span class="bk-hname">{bk['name']}</span>
+              <span class="bk-hchev" style="transform:rotate({chev_rot})">▾</span>
+            </div>
+            <div class="bk-hrate">{bk['rate_label']}</div>
+            <div class="bk-hmeta">Limit: {fmt(bk['cap'])} &nbsp;·&nbsp; Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
+            <div class="bk-hnote">{bk['note']}</div>
+          </div>
+        </div>""", unsafe_allow_html=True)
 
-        label = (
-            f"{bk['name']}  {chevron}\n"
-            f"\n"
-            f"[{bk['rate_label']}]\n"
-            f"\n"
-            f"Limit: {fmt(bk['cap'])}  ·  Borrowed: {fmt(bank_bal)} ({used_pct}%)\n"
-            f"{bk['note']}"
-        )
-        if st.button(label, key=btn_key, use_container_width=True):
+        # Invisible Streamlit button — only exists so clicking it causes a rerun
+        st.markdown('<div class="bk-trigger">', unsafe_allow_html=True)
+        if st.button("x", key=btn_key):
             st.session_state["bank_open"] = bk_id if not is_open else None
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # Accordion content below the card
+        # Accordion
         if is_open:
-            st.markdown('<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 12px 12px;padding:16px 20px;margin-bottom:12px">', unsafe_allow_html=True)
+            st.markdown(f'<div class="bk-body {cls}">', unsafe_allow_html=True)
             if not can_bank:
-                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.35);margin:0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.4);margin:0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
             elif available <= 0:
-                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);margin:0">Credit limit reached for this bank.</p>', unsafe_allow_html=True)
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Credit limit reached.</p>', unsafe_allow_html=True)
             else:
                 valid_amts = [a for a in bk["borrow_options"] if a <= available]
                 if valid_amts:
-                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 10px">Choose amount to borrow:</p>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 12px">Choose amount to borrow:</p>', unsafe_allow_html=True)
                     bcols = st.columns(len(valid_amts))
                     for i, amt in enumerate(valid_amts):
                         with bcols[i]:
@@ -999,7 +1027,7 @@ elif active == "loans":
                                 st.success(f"Borrowed {fmt(amt)} from {bk['name']}"); st.rerun()
                             st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);margin:0">No valid borrow amounts available.</p>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">No valid amounts available.</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
     if phase == "between" and loan_balance > 0:
