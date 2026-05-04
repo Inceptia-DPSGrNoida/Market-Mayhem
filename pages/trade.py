@@ -1031,8 +1031,9 @@ elif active == "loans":
     .bk-s .bk-hrate { color:#00C896; }
     .bk-m .bk-hrate { color:#ffd93d; }
     .bk-r .bk-hrate { color:#FF4D6A; }
-    /* hide the trigger button completely */
-    .bk-trigger { position:absolute; width:0; height:0; overflow:hidden; opacity:0; pointer-events:none; }
+    /* hide the trigger button — invisible but still JS-clickable */
+    .bk-trigger { height:0 !important; overflow:hidden !important; margin:0 !important; padding:0 !important; }
+    .bk-trigger button { opacity:0 !important; position:absolute !important; width:1px !important; height:1px !important; pointer-events:none !important; }
     /* light mode */
     body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
     body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
@@ -1062,9 +1063,21 @@ elif active == "loans":
 
         # Full HTML card — clicking fires hidden Streamlit button via JS
         st.markdown(f"""
-        <div class="bk-wrap {cls}" onclick="(function(){{
-          var b=document.querySelector('[data-testid=\\'{btn_key}\\']');
-          if(b)b.click();
+        <div class="bk-wrap {cls}" id="bkwrap-{bk_id}" onclick="(function(){{
+          var wrap = document.getElementById('bkwrap-{bk_id}');
+          var container = wrap ? wrap.nextElementSibling : null;
+          if (container) {{
+            var btn = container.querySelector('button');
+            if (btn) {{ btn.click(); return; }}
+          }}
+          // fallback: search whole page
+          var all = document.querySelectorAll('.bk-trigger button');
+          for (var i=0; i<all.length; i++) {{
+            var p = all[i].closest('.bk-trigger');
+            if (p && p.previousElementSibling && p.previousElementSibling.id === 'bkwrap-{bk_id}') {{
+              all[i].click(); return;
+            }}
+          }}
         }})()">
           <div class="bk-head {'open' if is_open else ''}">
             <div class="bk-head-top">
