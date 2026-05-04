@@ -371,7 +371,7 @@ if _qp_theme is not None:
 _vol   = st.session_state["music_volume"]
 _light = st.session_state["light_mode"]
 
-# Header — plain HTML in st.markdown (renders at correct page width)
+# Header (plain HTML — renders fine, no scripts needed here)
 st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
   <div>
@@ -380,7 +380,7 @@ st.markdown(f"""
   </div>
   <div style="display:flex;align-items:center;gap:14px">
     <div style="font-size:12px;color:rgba(255,255,255,0.25);font-family:Space Grotesk,monospace">Round {state['round']} / 4</div>
-    <div id="mm-gear-trigger"
+    <div id="mm-gear-btn"
          style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.05);
                 border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.55);
                 font-size:18px;cursor:pointer;display:flex;align-items:center;
@@ -388,129 +388,139 @@ st.markdown(f"""
          title="Settings">⚙</div>
   </div>
 </div>
-
-<style>
-#mm-soverlay {{
-  display:none;position:fixed;inset:0;z-index:9998;
-  background:rgba(0,0,0,0.5);backdrop-filter:blur(3px);
-}}
-#mm-spanel {{
-  position:fixed;top:0;right:0;width:290px;height:100vh;
-  background:#0d0f1a;border-left:1px solid #1e2535;
-  z-index:9999;padding:28px 22px;overflow-y:auto;box-sizing:border-box;
-  transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
-}}
-#mm-spanel.sp-open {{ transform:translateX(0); }}
-#mm-soverlay.sp-open {{ display:block; }}
-.sph {{ display:flex;justify-content:space-between;align-items:center;margin-bottom:28px; }}
-.sph-title {{ font-family:Space Grotesk,sans-serif;font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px; }}
-.sph-x {{ width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
-           background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);font-size:15px;
-           cursor:pointer;display:flex;align-items:center;justify-content:center;
-           transition:background 0.15s,color 0.15s,border-color 0.15s; }}
-.sph-x:hover {{ background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }}
-.sp-sec {{ margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }}
-.sp-lbl {{ font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }}
-.sp-tog {{ display:flex;align-items:center;justify-content:space-between;padding:11px 13px;
-           border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-           cursor:pointer;transition:background 0.15s;user-select:none; }}
-.sp-tog:hover {{ background:rgba(255,255,255,0.07); }}
-.sp-tog-txt {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500; }}
-.sp-pill {{ width:38px;height:21px;border-radius:11px;background:rgba(255,255,255,0.1);
-            position:relative;transition:background 0.2s;flex-shrink:0; }}
-.sp-pill.on {{ background:#00C896; }}
-.sp-pill::after {{ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
-                   border-radius:50%;background:#fff;transition:transform 0.2s; }}
-.sp-pill.on::after {{ transform:translateX(17px); }}
-.sp-vlbl {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
-.sp-vrow {{ display:flex;align-items:center;gap:10px; }}
-.sp-vrow input[type=range] {{
-  flex:1;-webkit-appearance:none;height:4px;border-radius:2px;
-  background:rgba(255,255,255,0.12);outline:none;cursor:pointer;
-}}
-.sp-vrow input[type=range]::-webkit-slider-thumb {{
-  -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
-  background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2);
-}}
-.sp-vval {{ font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }}
-</style>
 """, unsafe_allow_html=True)
 
-# Settings JS — must use components.html so the <script> actually executes
-import streamlit.components.v1 as _components
-_components.html(f"""<script>
-(function() {{
-  // Build overlay + panel once, attached to parent page body
-  var par = window.parent.document;
-  if (par.getElementById('mm-spanel')) {{
-    // Panel already exists — just update volume slider value
-    var sl = par.getElementById('mm-vol-sl');
-    if (sl) sl.value = {_vol};
-    return;
+# Settings panel — inject CSS + DOM + JS all into the PARENT document from the iframe
+import streamlit.components.v1 as _stc
+_stc.html(f"""
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:transparent">
+<script>
+(function(){{
+  var P = window.parent.document;
+
+  // ── Inject CSS into parent <head> once ──────────────────────────────────
+  if (!P.getElementById('mm-settings-css')) {{
+    var s = P.createElement('style');
+    s.id = 'mm-settings-css';
+    s.textContent = `
+      #mm-soverlay {{
+        display:none;position:fixed;inset:0;z-index:9998;
+        background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);
+      }}
+      #mm-spanel {{
+        position:fixed;top:0;right:0;width:300px;height:100vh;
+        background:#0d0f1a;border-left:1px solid #1e2535;
+        z-index:9999;padding:28px 22px;overflow-y:auto;box-sizing:border-box;
+        transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
+      }}
+      #mm-spanel.sp-open {{ transform:translateX(0); }}
+      #mm-soverlay.sp-open {{ display:block; }}
+      .mm-sph {{ display:flex;justify-content:space-between;align-items:center;margin-bottom:28px; }}
+      .mm-sph-title {{ font-family:Space Grotesk,sans-serif;font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px; }}
+      .mm-sph-x {{ width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
+                   background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);font-size:15px;
+                   cursor:pointer;display:flex;align-items:center;justify-content:center;
+                   transition:background .15s,color .15s,border-color .15s; }}
+      .mm-sph-x:hover {{ background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }}
+      .mm-ssec {{ margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }}
+      .mm-slbl {{ font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }}
+      .mm-stog {{ display:flex;align-items:center;justify-content:space-between;padding:11px 13px;
+                  border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+                  cursor:pointer;transition:background .15s;user-select:none; }}
+      .mm-stog:hover {{ background:rgba(255,255,255,0.07); }}
+      .mm-stog-txt {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500; }}
+      .mm-spill {{ width:38px;height:21px;border-radius:11px;background:rgba(255,255,255,0.1);
+                   position:relative;transition:background .2s;flex-shrink:0; }}
+      .mm-spill.on {{ background:#00C896; }}
+      .mm-spill::after {{ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
+                          border-radius:50%;background:#fff;transition:transform .2s; }}
+      .mm-spill.on::after {{ transform:translateX(17px); }}
+      .mm-svlbl {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
+      .mm-svrow {{ display:flex;align-items:center;gap:10px; }}
+      .mm-svrow input[type=range] {{
+        flex:1;-webkit-appearance:none;height:4px;border-radius:2px;
+        background:rgba(255,255,255,0.12);outline:none;cursor:pointer;
+      }}
+      .mm-svrow input[type=range]::-webkit-slider-thumb {{
+        -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+        background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2);
+      }}
+      .mm-svval {{ font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }}
+    `;
+    P.head.appendChild(s);
   }}
 
-  var overlay = par.createElement('div'); overlay.id = 'mm-soverlay';
-  var panel   = par.createElement('div'); panel.id   = 'mm-spanel';
+  // ── Build overlay + panel DOM once ──────────────────────────────────────
   var isLight = {'true' if _light else 'false'};
+  var vol = {_vol};
 
-  panel.innerHTML =
-    '<div class="sph">' +
-      '<span class="sph-title">Settings</span>' +
-      '<div class="sph-x" id="mm-sclose">\u2715</div>' +
-    '</div>' +
-    '<div class="sp-sec">' +
-      '<div class="sp-lbl">Appearance</div>' +
-      '<div class="sp-tog" id="mm-stog">' +
-        '<span class="sp-tog-txt" id="mm-stxt">' + (isLight ? '\uD83C\uDF19 Dark mode' : '\u2600\uFE0F Light mode') + '</span>' +
-        '<div class="sp-pill' + (isLight ? ' on' : '') + '" id="mm-spill"></div>' +
+  if (!P.getElementById('mm-spanel')) {{
+    var ov = P.createElement('div'); ov.id = 'mm-soverlay';
+    var pn = P.createElement('div'); pn.id = 'mm-spanel';
+    pn.innerHTML =
+      '<div class="mm-sph">' +
+        '<span class="mm-sph-title">Settings</span>' +
+        '<div class="mm-sph-x" id="mm-sclose">&#x2715;</div>' +
       '</div>' +
-    '</div>' +
-    '<div class="sp-sec" style="border-bottom:none">' +
-      '<div class="sp-lbl">Music Volume</div>' +
-      '<div class="sp-vlbl">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>' +
-      '<div class="sp-vrow">' +
-        '<span style="font-size:15px">\uD83D\uDD08</span>' +
-        '<input type="range" id="mm-vol-sl" min="0" max="100" value="{_vol}">' +
-        '<span style="font-size:15px">\uD83D\uDD0A</span>' +
-        '<span class="sp-vval" id="mm-vval">{_vol}</span>' +
+      '<div class="mm-ssec">' +
+        '<div class="mm-slbl">Appearance</div>' +
+        '<div class="mm-stog" id="mm-stog">' +
+          '<span class="mm-stog-txt" id="mm-stxt">' + (isLight ? '&#x1F319; Dark mode' : '&#x2600;&#xFE0F; Light mode') + '</span>' +
+          '<div class="mm-spill' + (isLight ? ' on' : '') + '" id="mm-spill"></div>' +
+        '</div>' +
       '</div>' +
-    '</div>';
+      '<div class="mm-ssec" style="border-bottom:none">' +
+        '<div class="mm-slbl">Music Volume</div>' +
+        '<div class="mm-svlbl">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>' +
+        '<div class="mm-svrow">' +
+          '<span style="font-size:15px">&#x1F508;</span>' +
+          '<input type="range" id="mm-vol-sl" min="0" max="100" value="' + vol + '">' +
+          '<span style="font-size:15px">&#x1F50A;</span>' +
+          '<span class="mm-svval" id="mm-vval">' + vol + '</span>' +
+        '</div>' +
+      '</div>';
+    P.body.appendChild(ov);
+    P.body.appendChild(pn);
 
-  par.body.appendChild(overlay);
-  par.body.appendChild(panel);
-  if (isLight) par.body.classList.add('light-mode');
+    // Events
+    function openPanel()  {{ pn.classList.add('sp-open'); ov.classList.add('sp-open'); }}
+    function closePanel() {{ pn.classList.remove('sp-open'); ov.classList.remove('sp-open'); }}
+    ov.addEventListener('click', closePanel);
+    P.getElementById('mm-sclose').addEventListener('click', closePanel);
 
-  function openPanel()  {{ panel.classList.add('sp-open'); overlay.classList.add('sp-open'); }}
-  function closePanel() {{ panel.classList.remove('sp-open'); overlay.classList.remove('sp-open'); }}
+    // Gear button — poll until the gear div exists in the parent page
+    (function tryGear() {{
+      var g = P.getElementById('mm-gear-btn');
+      if (g) {{ g.onclick = openPanel; }}
+      else   {{ setTimeout(tryGear, 150); }}
+    }})();
 
-  overlay.addEventListener('click', closePanel);
-  par.getElementById('mm-sclose').addEventListener('click', closePanel);
+    // Theme toggle
+    P.getElementById('mm-stog').addEventListener('click', function() {{
+      isLight = !isLight;
+      P.getElementById('mm-spill').classList.toggle('on', isLight);
+      P.getElementById('mm-stxt').innerHTML = isLight ? '&#x1F319; Dark mode' : '&#x2600;&#xFE0F; Light mode';
+      if (isLight) P.body.classList.add('light-mode');
+      else P.body.classList.remove('light-mode');
+    }});
 
-  // Wire gear button (already in the page from st.markdown above)
-  function tryWireGear() {{
-    var gear = par.getElementById('mm-gear-trigger');
-    if (gear) {{ gear.addEventListener('click', openPanel); }}
-    else {{ setTimeout(tryWireGear, 100); }}
+    // Volume slider
+    P.getElementById('mm-vol-sl').addEventListener('input', function() {{
+      P.getElementById('mm-vval').textContent = this.value;
+      var audio = P.getElementById('mm-bg-audio');
+      if (audio) audio.volume = parseInt(this.value) / 100;
+    }});
+  }} else {{
+    // Panel already in DOM — just sync volume slider
+    var sl = P.getElementById('mm-vol-sl');
+    if (sl) sl.value = vol;
   }}
-  tryWireGear();
 
-  // Theme toggle
-  par.getElementById('mm-stog').addEventListener('click', function() {{
-    isLight = !isLight;
-    par.getElementById('mm-spill').classList.toggle('on', isLight);
-    par.getElementById('mm-stxt').textContent = isLight ? '\uD83C\uDF19 Dark mode' : '\u2600\uFE0F Light mode';
-    if (isLight) par.body.classList.add('light-mode');
-    else par.body.classList.remove('light-mode');
-  }});
-
-  // Volume slider
-  par.getElementById('mm-vol-sl').addEventListener('input', function() {{
-    par.getElementById('mm-vval').textContent = this.value;
-    var audio = par.getElementById('mm-bg-audio');
-    if (audio) audio.volume = parseInt(this.value) / 100;
-  }});
+  if (isLight) P.body.classList.add('light-mode');
 }})();
-</script>""", height=0)
+</script>
+</body></html>
+""", height=0)
 
 phase_map = {
     "lobby":   ("phase-lobby",   "WAITING FOR HOST",               "The trading floor opens shortly."),
@@ -763,39 +773,63 @@ elif active == "loans":
     if loan_balance > 0:
         st.markdown(f'<div class="loan-card"><div class="loan-title">Total Outstanding Loan</div><span style="font-size:28px;font-weight:700;font-family:Space Grotesk,monospace;color:#a78bfa">{fmt(loan_balance)}</span><div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:10px">Interest charged per bank at round-end.</div></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="bank-grid">', unsafe_allow_html=True)
     for bk_id, bk in BANKS.items():
-        bank_bal = team.get(f"loan_{bk_id}", 0)
-        used_pct = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
+        bank_bal  = team.get(f"loan_{bk_id}", 0)
+        used_pct  = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
         available = max(0, bk["cap"] - bank_bal)
-        is_open = st.session_state["bank_open"] == bk_id
-        chevron_cls = "bk-chevron open" if is_open else "bk-chevron"
-        st.markdown(f"""
-        <div class="bank-card {bk['css']}" style="border-radius:{'12px 12px 0 0' if is_open else '12px'}">
-          <div class="bk-name">{bk['name']} <span class="{chevron_cls}">▾</span></div>
-          <div class="bk-rate">{bk['rate_label']}</div>
-          <div class="bk-limit">Limit: {fmt(bk['cap'])} · Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
-          <div class="bk-note">{bk['note']}</div>
-        </div>""", unsafe_allow_html=True)
+        is_open   = st.session_state["bank_open"] == bk_id
 
-        # Toggle button (invisible, full-width, sits over the card visually)
-        toggle_key = f"bank_toggle_{bk_id}"
-        st.markdown(f'<style>div[data-testid="element-container"]:has(button[kind="secondary"][data-testid="{toggle_key}"]) button {{ position:relative;margin-top:-80px;height:80px;width:100%;background:transparent !important;border:none !important;color:transparent !important;cursor:pointer !important;z-index:10; }}</style>', unsafe_allow_html=True)
-        if st.button(" ", key=toggle_key, use_container_width=True):
+        # Border colours per bank
+        border_map = {"bank-safe": "rgba(0,200,150,0.35)", "bank-mid": "rgba(255,217,61,0.35)", "bank-risky": "rgba(255,77,106,0.35)"}
+        rate_color_map = {"bank-safe": "#00C896", "bank-mid": "#ffd93d", "bank-risky": "#FF4D6A"}
+        border_col = border_map.get(bk["css"], "rgba(255,255,255,0.1)")
+        rate_col   = rate_color_map.get(bk["css"], "#fff")
+        br_bottom  = "0 0 0 0" if is_open else "12px 12px 12px 12px"
+
+        # Style the Streamlit button to look exactly like the bank card
+        btn_key = f"bk_btn_{bk_id}"
+        chevron = "▴" if is_open else "▾"
+        st.markdown(f"""
+        <style>
+        div[data-testid="stButton"] button[kind="secondary"][data-testid="{btn_key}"] {{
+          width:100% !important; text-align:left !important; height:auto !important;
+          padding:18px 20px !important; background:#0d0f1a !important;
+          border:1px solid {border_col} !important; border-radius:{br_bottom} !important;
+          white-space:pre-wrap !important; line-height:1.5 !important;
+          transition:transform 0.15s,box-shadow 0.15s !important;
+          font-family:inherit !important; cursor:pointer !important;
+          margin-bottom:0 !important;
+        }}
+        div[data-testid="stButton"] button[kind="secondary"][data-testid="{btn_key}"]:hover {{
+          transform:translateY(-1px) !important;
+          box-shadow:0 4px 20px rgba(0,0,0,0.3) !important;
+          border-color:{border_col.replace('0.35','0.6')} !important;
+        }}
+        </style>""", unsafe_allow_html=True)
+
+        label = (
+            f"{bk['name']}  {chevron}\n"
+            f"\n"
+            f"[{bk['rate_label']}]\n"
+            f"\n"
+            f"Limit: {fmt(bk['cap'])}  ·  Borrowed: {fmt(bank_bal)} ({used_pct}%)\n"
+            f"{bk['note']}"
+        )
+        if st.button(label, key=btn_key, use_container_width=True):
             st.session_state["bank_open"] = bk_id if not is_open else None
             st.rerun()
 
-        # Accordion content
+        # Accordion content below the card
         if is_open:
-            st.markdown('<div class="bank-accordion-inner">', unsafe_allow_html=True)
+            st.markdown('<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-top:none;border-radius:0 0 12px 12px;padding:16px 20px;margin-bottom:12px">', unsafe_allow_html=True)
             if not can_bank:
-                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.35);padding:4px 0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.35);margin:0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
             elif available <= 0:
-                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);padding:4px 0">Credit limit reached for this bank.</p>', unsafe_allow_html=True)
+                st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);margin:0">Credit limit reached for this bank.</p>', unsafe_allow_html=True)
             else:
                 valid_amts = [a for a in bk["borrow_options"] if a <= available]
                 if valid_amts:
-                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:10px">Choose amount to borrow:</p>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 10px">Choose amount to borrow:</p>', unsafe_allow_html=True)
                     bcols = st.columns(len(valid_amts))
                     for i, amt in enumerate(valid_amts):
                         with bcols[i]:
@@ -810,10 +844,8 @@ elif active == "loans":
                                 st.success(f"Borrowed {fmt(amt)} from {bk['name']}"); st.rerun()
                             st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25)">No valid borrow amounts available.</p>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.25);margin:0">No valid borrow amounts available.</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     if phase == "between" and loan_balance > 0:
         st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:20px 0 8px">Repay now to reduce interest before next round:</p>', unsafe_allow_html=True)
