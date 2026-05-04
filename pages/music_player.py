@@ -1,97 +1,101 @@
 """
-music_player.py — Background music helper for Market Mayhem
-Serves the MP3 via a base64 data URI embedded in a hidden <audio> element.
-Call inject_music(phase, volume) from any page. Music plays only on:
-  lobby, between (break), ended (thank-you screen).
+music_player.py — Background music for Market Mayhem
+Injects a persistent <audio> element into the parent Streamlit page.
+Music plays only during: lobby, between (break), ended (thank-you).
 Fades in/out over 1.3 seconds.
+Place this file and the .mp3 in the same folder (root or pages/).
 """
 
-import streamlit.components.v1 as components
-import base64
+import base64, streamlit.components.v1 as components
 from pathlib import Path
+from functools import lru_cache
 
 _MP3_NAME = "music.mp3"
-_here = Path(__file__).parent
-_MUSIC_FILE = next(
-    (p for p in [_here / _MP3_NAME, _here.parent / _MP3_NAME] if p.exists()),
-    _here / _MP3_NAME  # fallback (will fail silently below)
-)
-_cached_b64: str | None = None
 
+@lru_cache(maxsize=1)
 def _get_b64() -> str:
-    global _cached_b64
-    if _cached_b64 is None and _MUSIC_FILE.exists():
-        _cached_b64 = base64.b64encode(_MUSIC_FILE.read_bytes()).decode()
-    return _cached_b64 or ""
+    here = Path(__file__).parent
+    for p in [here / _MP3_NAME, here.parent / _MP3_NAME]:
+        if p.exists():
+            return base64.b64encode(p.read_bytes()).decode()
+    return ""
 
-# Phases where music should play
 MUSIC_PHASES = {"lobby", "between", "ended"}
 
 def inject_music(phase: str, volume: int = 50):
-    """
-    Inject an invisible audio player into the page.
-    - phase: current game phase string
-    - volume: 0–100 integer from the settings slider
-    """
-    should_play = phase in MUSIC_PHASES
     b64 = _get_b64()
     if not b64:
-        return  # file not found — fail silently
+        return  # MP3 not found — fail silently
 
+    should_play = phase in MUSIC_PHASES
     vol = max(0.0, min(1.0, volume / 100))
-    fade_duration = 1.3  # seconds
 
-    components.html(f"""
-    <audio id="mm-bg-audio" loop preload="auto"
-           src="data:audio/mpeg;base64,{b64}"
-           style="display:none"></audio>
-    <script>
-    (function() {{
-      var audio = document.getElementById('mm-bg-audio');
-      if (!audio) return;
-      var targetVol = {vol:.3f};
-      var shouldPlay = {'true' if should_play else 'false'};
-      var fadeDur = {fade_duration * 1000:.0f}; // ms
-      var steps = 30;
-      var interval = fadeDur / steps;
+    components.html(f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;overflow:hidden;background:transparent">
+<script>
+(function() {{
+  var P   = window.parent.document;
+  var vol = {vol:.3f};
+  var shouldPlay = {'true' if should_play else 'false'};
+  var FADE = 1300;
+  var STEPS = 40;
+  var INTERVAL = FADE / STEPS;
 
-      function fadeIn() {{
-        audio.volume = 0;
-        if (audio.paused) audio.play().catch(function(){{}});
-        var step = 0;
-        var t = setInterval(function() {{
-          step++;
-          audio.volume = Math.min(targetVol, (step / steps) * targetVol);
-          if (step >= steps) clearInterval(t);
-        }}, interval);
-      }}
+  function fadeIn(audio) {{
+    audio.volume = 0;
+    if (audio.paused) audio.play().catch(function(){{}});
+    var step = 0;
+    var t = setInterval(function() {{
+      step++;
+      audio.volume = Math.min(vol, (step / STEPS) * vol);
+      if (step >= STEPS) {{ audio.volume = vol; clearInterval(t); }}
+    }}, INTERVAL);
+  }}
 
-      function fadeOut(cb) {{
-        var startVol = audio.volume;
-        var step = 0;
-        var t = setInterval(function() {{
-          step++;
-          audio.volume = Math.max(0, startVol * (1 - step / steps));
-          if (step >= steps) {{ clearInterval(t); if (cb) cb(); }}
-        }}, interval);
-      }}
+  function fadeOut(audio, cb) {{
+    var start = audio.volume;
+    var step = 0;
+    var t = setInterval(function() {{
+      step++;
+      audio.volume = Math.max(0, start * (1 - step / STEPS));
+      if (step >= STEPS) {{ audio.volume = 0; clearInterval(t); if (cb) cb(); }}
+    }}, INTERVAL);
+  }}
 
-      // Sync volume without fade if already playing at right vol
-      function syncVolume() {{
-        if (!audio.paused) audio.volume = targetVol;
-      }}
+  function setupAudio() {{
+    var audio = P.getElementById('mm-bg-audio');
 
-      if (shouldPlay) {{
-        if (audio.paused) {{
-          fadeIn();
-        }} else {{
-          syncVolume();
-        }}
+    if (!audio) {{
+      audio = P.createElement('audio');
+      audio.id  = 'mm-bg-audio';
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.volume  = 0;
+      var src = P.createElement('source');
+      src.src  = 'data:audio/mpeg;base64,{b64}';
+      src.type = 'audio/mpeg';
+      audio.appendChild(src);
+      P.body.appendChild(audio);
+    }}
+
+    if (shouldPlay) {{
+      if (audio.paused) {{
+        fadeIn(audio);
       }} else {{
-        if (!audio.paused) {{
-          fadeOut(function() {{ audio.pause(); audio.currentTime = 0; }});
-        }}
+        audio.volume = vol;
       }}
-    }})();
-    </script>
-    """, height=0)
+    }} else {{
+      if (!audio.paused) {{
+        fadeOut(audio, function() {{ audio.pause(); }});
+      }}
+    }}
+  }}
+
+  try {{
+    setupAudio();
+  }} catch(e) {{
+    setTimeout(setupAudio, 300);
+  }}
+}})();
+</script>
+</body></html>""", height=1)
