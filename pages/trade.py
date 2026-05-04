@@ -6,21 +6,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import load_state, save_state, STARTING_CASH, ROUND_DURATION
 from streamlit_autorefresh import st_autorefresh
 
-# Load music_player from root dir (works whether it lives in pages/ or root)
-def _load_music_player():
-    for candidate in [
-        Path(__file__).parent / "music_player.py",        # pages/music_player.py
-        Path(__file__).parent.parent / "music_player.py", # root/music_player.py
-    ]:
-        if candidate.exists():
-            spec = importlib.util.spec_from_file_location("music_player", candidate)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return mod.inject_music
-    return lambda phase, volume=50: None  # graceful no-op if file missing
-
-inject_music = _load_music_player()
-
 BREAK_DURATION = 300
 
 st.set_page_config(page_title="Market Mayhem — Inceptia", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
@@ -421,9 +406,106 @@ state = load_state()
 team = state["teams"].get(tid)
 phase = state["phase"]
 
-# ── Music ─────────────────────────────────────────────────────────────────────
+# ── Music — direct implementation, no external file needed ────────────────────
+_MUSIC_PHASES = {"lobby", "between", "ended"}
 _music_vol = st.session_state.get("music_volume", 50)
-inject_music(phase, _music_vol)
+_should_play = phase in _MUSIC_PHASES
+
+# Find MP3 once and cache the path
+if "music_src_url" not in st.session_state:
+    import base64 as _b64
+    _mp3_name = "music.mp3"
+    _mp3_candidates = [
+        Path(__file__).parent / _mp3_name,
+        Path(__file__).parent.parent / _mp3_name,
+    ]
+    _mp3_path = next((p for p in _mp3_candidates if p.exists()), None)
+    if _mp3_path:
+        _b64_data = _b64.b64encode(_mp3_path.read_bytes()).decode()
+        st.session_state["music_src_url"] = f"data:audio/mpeg;base64,{_b64_data}"
+    else:
+        st.session_state["music_src_url"] = None
+
+_music_url = st.session_state.get("music_src_url")
+
+if _music_url:
+    import streamlit.components.v1 as _stc_music
+    _vol_f = max(0.0, min(1.0, _music_vol / 100))
+    _stc_music.html(f"""<!DOCTYPE html><html>
+<body style="margin:0;padding:0;overflow:hidden;background:transparent">
+<script>
+(function(){{
+  var P = window.parent.document;
+  var shouldPlay = {'true' if _should_play else 'false'};
+  var targetVol  = {_vol_f:.3f};
+  var STEPS = 40, INTERVAL = 32; // 1.3s fade
+
+  function fade(audio, toVol, cb) {{
+    var from = audio.volume, step = 0;
+    clearInterval(audio._ft);
+    audio._ft = setInterval(function() {{
+      step++;
+      audio.volume = Math.max(0, Math.min(1, from + (toVol - from) * step / STEPS));
+      if (step >= STEPS) {{ audio.volume = toVol; clearInterval(audio._ft); if (cb) cb(); }}
+    }}, INTERVAL);
+  }}
+
+  function getOrCreate() {{
+    var a = P.getElementById('mm-audio');
+    if (!a) {{
+      a = P.createElement('audio');
+      a.id = 'mm-audio'; a.loop = true; a.volume = 0;
+      a.src = "{_music_url}";
+      P.body.appendChild(a);
+
+      // Show a small persistent play button if autoplay is blocked
+      var btn = P.createElement('div');
+      btn.id = 'mm-play-btn';
+      btn.title = 'Enable music';
+      btn.innerHTML = '🎵';
+      btn.style.cssText = 'position:fixed;bottom:18px;left:18px;z-index:9997;' +
+        'width:38px;height:38px;border-radius:50%;' +
+        'background:rgba(0,200,150,0.15);border:1px solid rgba(0,200,150,0.3);' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'cursor:pointer;font-size:16px;transition:background 0.2s;' +
+        'box-shadow:0 2px 12px rgba(0,0,0,0.3)';
+      btn.onclick = function() {{
+        a.play().then(function() {{
+          fade(a, targetVol);
+          btn.style.display = 'none';
+        }}).catch(function(){{}});
+      }};
+      P.body.appendChild(btn);
+    }}
+    return a;
+  }}
+
+  function sync() {{
+    var a = getOrCreate();
+    var btn = P.getElementById('mm-play-btn');
+    if (shouldPlay) {{
+      if (a.paused) {{
+        a.play().then(function() {{
+          if (btn) btn.style.display = 'none';
+          fade(a, targetVol);
+        }}).catch(function() {{
+          // Autoplay blocked — show the 🎵 button
+          if (btn) btn.style.display = 'flex';
+        }});
+      }} else {{
+        a.volume = targetVol;
+      }}
+    }} else {{
+      if (!a.paused) {{
+        fade(a, 0, function() {{ a.pause(); }});
+      }}
+      if (btn) btn.style.display = 'none';
+    }}
+  }}
+
+  sync();
+}})();
+</script></body></html>""", height=1)
 
 # ── Live micro-fluctuation engine ────────────────────────────────────────────
 # Real prices only change at round start (host). This adds visual micro-ticks
