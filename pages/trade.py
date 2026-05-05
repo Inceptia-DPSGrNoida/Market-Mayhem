@@ -507,9 +507,9 @@ _stc_music.html(f"""<script>
 # only — never written to game_state.json, so it doesn't affect real prices.
 import random as _random
 
-MICRO_VOL = {  # per-tick max % move (purely visual)
-    "zora":0.004, "streamvx":0.018, "freshco":0.003, "voltex":0.012,
-    "mediq":0.015, "skylink":0.022, "swifthaul":0.008, "crownmart":0.016, "shieldgen":0.004,
+MICRO_VOL = {  # per-tick max % move (purely visual) — kept conservative
+    "zora":0.003, "streamvx":0.010, "freshco":0.002, "voltex":0.008,
+    "mediq":0.009, "skylink":0.012, "swifthaul":0.005, "crownmart":0.009, "shieldgen":0.003,
 }
 
 if "micro_prices" not in st.session_state or st.session_state.get("micro_phase") != phase:
@@ -574,10 +574,16 @@ if "music_volume" not in st.session_state:
     st.session_state["music_volume"] = int(_qp.get("vol", 50))
 if "light_mode" not in st.session_state:
     st.session_state["light_mode"] = _qp.get("theme", "dark") == "light"
+if "chart_type" not in st.session_state:
+    st.session_state["chart_type"] = _qp.get("chart", "line")
+if "intel_popup" not in st.session_state:
+    st.session_state["intel_popup"] = _qp.get("intel_popup", "off") == "on"
 
 # Handle query param updates from the JS settings panel
 _qp_vol   = _qp.get("vol")
 _qp_theme = _qp.get("theme")
+_qp_chart = _qp.get("chart")
+_qp_intel = _qp.get("intel_popup")
 if _qp_vol is not None:
     try:
         _v = int(_qp_vol)
@@ -589,9 +595,18 @@ if _qp_theme is not None:
     _lm = (_qp_theme == "light")
     if _lm != st.session_state["light_mode"]:
         st.session_state["light_mode"] = _lm
+if _qp_chart is not None and _qp_chart in ("line", "candle", "bar"):
+    if _qp_chart != st.session_state["chart_type"]:
+        st.session_state["chart_type"] = _qp_chart
+if _qp_intel is not None:
+    _ip = (_qp_intel == "on")
+    if _ip != st.session_state["intel_popup"]:
+        st.session_state["intel_popup"] = _ip
 
 _vol   = st.session_state["music_volume"]
 _light = st.session_state["light_mode"]
+_chart = st.session_state.get("chart_type", "line")
+_intel_popup = st.session_state.get("intel_popup", False)
 
 # Header (plain HTML — renders fine, no scripts needed here)
 st.markdown(f"""
@@ -651,10 +666,12 @@ _stc.html(f"""
       .mm-tbtn:hover {{ background:rgba(255,255,255,0.08); }}
       .mm-tbtn.t-active-light {{ border-color:#ffd93d;background:rgba(255,211,61,0.1); }}
       .mm-tbtn.t-active-dark  {{ border-color:#a78bfa;background:rgba(167,139,250,0.1); }}
+      .mm-tbtn.t-active-chart {{ border-color:#00C896;background:rgba(0,200,150,0.1); }}
       .mm-tbtn svg {{ width:28px;height:28px; }}
       .mm-tbtn span {{ font-size:12px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.3px; }}
       .mm-tbtn.t-active-light span {{ color:#ffd93d; }}
       .mm-tbtn.t-active-dark  span {{ color:#a78bfa; }}
+      .mm-tbtn.t-active-chart span {{ color:#00C896; }}
       .mm-svlbl {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
       .mm-svrow {{ display:flex;align-items:center;gap:10px; }}
       .mm-svrow input[type=range] {{
@@ -666,6 +683,14 @@ _stc.html(f"""
         background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2);
       }}
       .mm-svval {{ font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }}
+      .mm-tog-row {{ display:flex;align-items:center;justify-content:space-between;gap:10px; }}
+      .mm-tog-desc {{ font-size:13px;color:rgba(255,255,255,0.6);flex:1;line-height:1.4; }}
+      .mm-tog {{ position:relative;width:44px;height:24px;flex-shrink:0; }}
+      .mm-tog input {{ opacity:0;width:0;height:0; }}
+      .mm-tog-sl {{ position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border-radius:99px;transition:background 0.2s; }}
+      .mm-tog-sl:before {{ content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:rgba(255,255,255,0.4);border-radius:50%;transition:transform 0.2s,background 0.2s; }}
+      .mm-tog input:checked + .mm-tog-sl {{ background:rgba(255,77,106,0.35); }}
+      .mm-tog input:checked + .mm-tog-sl:before {{ transform:translateX(20px);background:#FF4D6A; }}
     `;
     P.head.appendChild(s);
   }}
@@ -969,7 +994,8 @@ if active == "market":
             elif len(hist)==1: hist = [hist[0], price]
             display_price = st.session_state["micro_prices"].get(cid, price) if phase == "trading" else price
             display_hist = hist[:-1] + [display_price] if hist else [display_price]
-            chart_color = "#00C896" if display_hist[-1] >= display_hist[0] else "#FF4D6A"
+            # Color based on real price vs start of history — micro fluctuations don't change the color
+            chart_color = "#00C896" if price >= display_hist[0] else "#FF4D6A"
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
             df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
@@ -977,7 +1003,25 @@ if active == "market":
             _label_col = "rgba(30,60,30,0.7)"  if _is_light else "rgba(255,255,255,0.35)"
             _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
             _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
-            chart = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2).encode(
+            _chart_type = st.session_state.get("chart_type", "line")
+            if _chart_type == "bar":
+                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
+            elif _chart_type == "candle":
+                # Simulate candle with tick marks — use area+line combo for visual effect
+                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
+                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
+                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
+                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col, tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)))
+                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                st.altair_chart(chart, use_container_width=True)
+                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
+                continue
+            else:
+                _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
+            chart = _mark.encode(
                 x=alt.X("i:Q", axis=None),
                 y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
                         axis=alt.Axis(grid=True, gridColor=_grid_col,
@@ -1032,9 +1076,10 @@ elif active == "loans":
     .bk-s .bk-hrate { color:#00C896; }
     .bk-m .bk-hrate { color:#ffd93d; }
     .bk-r .bk-hrate { color:#FF4D6A; }
-    /* Invisible overlay button that covers the card */
-    .bk-trigger { position:relative; margin-bottom:12px; }
-    .bk-trigger button { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; border:none !important; background:transparent !important; z-index:5 !important; margin:0 !important; padding:0 !important; min-height:unset !important; }
+    /* Invisible overlay button that covers the bank card above it */
+    .bk-trigger { position:relative; height:0; overflow:visible; margin:0; padding:0; }
+    .bk-trigger > div[data-testid="stButton"] { position:absolute !important; bottom:0 !important; left:0 !important; right:0 !important; height:0 !important; }
+    .bk-trigger button { position:absolute !important; bottom:0 !important; left:0 !important; width:100% !important; height:120px !important; opacity:0 !important; cursor:pointer !important; border:none !important; background:transparent !important; z-index:10 !important; margin:0 !important; padding:0 !important; min-height:unset !important; transform:translateY(-100%) !important; }
     /* light mode */
     body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
     body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
@@ -1091,9 +1136,9 @@ elif active == "loans":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # Zero-size absolutely positioned container — truly invisible, no X shown
-        st.markdown('<div style="position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none">', unsafe_allow_html=True)
-        if st.button("x", key=btn_key):
+        # Invisible full-card-cover button — no label visible, click toggles accordion
+        st.markdown('<div class="bk-trigger">', unsafe_allow_html=True)
+        if st.button("​", key=btn_key):  # zero-width space label = nothing visible
             st.session_state["bank_open"] = bk_id if not is_open else None
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
