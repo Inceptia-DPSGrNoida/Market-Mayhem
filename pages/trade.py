@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 BREAK_DURATION = 300
 
 st.set_page_config(page_title="Market Mayhem — Inceptia", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
-st_autorefresh(interval=1000, key="trade_refresh")
+st_autorefresh(interval=3000, key="trade_refresh")
 
 # FIX 1: JS-driven countdown — no Streamlit reruns needed for the timer
 # Timer runs purely in JS, progress bar animates smoothly in CSS
@@ -653,9 +653,10 @@ _stc.html(f"""
     s.id = 'mm-settings-css';
     s.textContent = `
       #mm-soverlay {{
-        display:none;position:fixed;inset:0;z-index:9998;
-        background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);
+        display:none !important;position:fixed;inset:0;z-index:9998;
+        background:rgba(0,0,0,0.45);
       }}
+      #mm-soverlay.sp-open {{ display:block !important; }}
       #mm-spanel {{
         position:fixed;top:0;right:0;width:300px;height:100vh;
         background:#0d0f1a;border-left:1px solid #1e2535;
@@ -849,23 +850,36 @@ _stc.html(f"""
     var g   = P.getElementById('mm-gear-btn');
     if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
 
-    function openPanel()  {{ pn.classList.add('sp-open'); ov.classList.add('sp-open'); }}
-    function closePanel() {{ pn.classList.remove('sp-open'); ov.classList.remove('sp-open'); }}
+    // Replace overlay node first — drop stale listeners, never carry sp-open state
+    var ov2 = P.createElement('div');
+    ov2.id = 'mm-soverlay';
+    ov.parentNode.replaceChild(ov2, ov);
 
-    // Replace node to drop all old listeners, then re-add
+    function openPanel()  {{ pn.classList.add('sp-open'); ov2.classList.add('sp-open'); }}
+    function closePanel() {{ pn.classList.remove('sp-open'); ov2.classList.remove('sp-open'); }}
+
+    ov2.addEventListener('click', closePanel);
+
+    // Replace close button to drop stale listeners
     if (cls) {{
       var cls2 = cls.cloneNode(true);
       cls.parentNode.replaceChild(cls2, cls);
       cls2.addEventListener('click', closePanel);
     }}
-    var ov2 = ov.cloneNode(false);
-    ov2.id = 'mm-soverlay';
-    ov.parentNode.replaceChild(ov2, ov);
-    ov2.addEventListener('click', closePanel);
-    if (pn.classList.contains('sp-open')) ov2.classList.add('sp-open');
 
     if (g) {{ g.onclick = openPanel; }}
     else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
+
+    // Sync chart type buttons active state on every rerun
+    ['line','candle','bar'].forEach(function(t) {{
+      var el = P.getElementById('mm-chart-' + t);
+      if (el) el.className = 'mm-tbtn' + (t === chartType ? ' t-active-chart' : '');
+    }});
+    // Sync theme buttons
+    var bl = P.getElementById('mm-btn-light');
+    var bd = P.getElementById('mm-btn-dark');
+    if (bl) bl.className = 'mm-tbtn' + (isLight ? ' t-active-light' : '');
+    if (bd) bd.className = 'mm-tbtn' + (!isLight ? ' t-active-dark'  : '');
   }})();
 
   if (isLight) P.body.classList.add('light-mode');
@@ -1229,15 +1243,14 @@ elif active == "loans":
         cls       = css_map.get(bk["css"], "bk-s")
         chev_rot  = "180deg" if is_open else "0deg"
 
-        # Card onclick: set ?bank_open=bk_id in URL → Python reads on next autorefresh rerun
-        # No Streamlit button needed — pure JS navigation
+        # Card onclick: set ?bank_open=bk_id on PARENT window URL → Python reads on next rerun
         st.markdown(f"""
         <div class="bk-wrap {cls}" id="bkwrap-{bk_id}"
              style="cursor:pointer"
              onclick="(function(){{
-               var url = new URL(window.location.href);
+               var url = new URL(window.parent.location.href);
                url.searchParams.set('bank_open', '{bk_id}');
-               window.location.href = url.toString();
+               window.parent.location.href = url.toString();
              }})()">
           <div class="bk-head {'open' if is_open else ''}">
             <div class="bk-head-top">
