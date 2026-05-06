@@ -584,6 +584,7 @@ _qp_vol   = _qp.get("vol")
 _qp_theme = _qp.get("theme")
 _qp_chart = _qp.get("chart")
 _qp_intel = _qp.get("intel_popup")
+_qp_bank  = _qp.get("bank_open")
 if _qp_vol is not None:
     try:
         _v = int(_qp_vol)
@@ -602,6 +603,17 @@ if _qp_intel is not None:
     _ip = (_qp_intel == "on")
     if _ip != st.session_state["intel_popup"]:
         st.session_state["intel_popup"] = _ip
+if _qp_bank is not None:
+    # Toggle: if same bank clicked again, close it
+    if st.session_state.get("bank_open") == _qp_bank:
+        st.session_state["bank_open"] = None
+    else:
+        st.session_state["bank_open"] = _qp_bank
+    # Clear param from URL so next autorefresh doesn't re-toggle
+    try:
+        del st.query_params["bank_open"]
+    except Exception:
+        pass
 
 _vol   = st.session_state["music_volume"]
 _light = st.session_state["light_mode"]
@@ -828,6 +840,33 @@ _stc.html(f"""
     var sl = P.getElementById('mm-vol-sl');
     if (sl) sl.value = vol;
   }}
+
+  // ── Always re-wire gear + close on every rerun (iframe refreshes, parent DOM persists) ──
+  (function rewire() {{
+    var pn  = P.getElementById('mm-spanel');
+    var ov  = P.getElementById('mm-soverlay');
+    var cls = P.getElementById('mm-sclose');
+    var g   = P.getElementById('mm-gear-btn');
+    if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
+
+    function openPanel()  {{ pn.classList.add('sp-open'); ov.classList.add('sp-open'); }}
+    function closePanel() {{ pn.classList.remove('sp-open'); ov.classList.remove('sp-open'); }}
+
+    // Replace node to drop all old listeners, then re-add
+    if (cls) {{
+      var cls2 = cls.cloneNode(true);
+      cls.parentNode.replaceChild(cls2, cls);
+      cls2.addEventListener('click', closePanel);
+    }}
+    var ov2 = ov.cloneNode(false);
+    ov2.id = 'mm-soverlay';
+    ov.parentNode.replaceChild(ov2, ov);
+    ov2.addEventListener('click', closePanel);
+    if (pn.classList.contains('sp-open')) ov2.classList.add('sp-open');
+
+    if (g) {{ g.onclick = openPanel; }}
+    else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
+  }})();
 
   if (isLight) P.body.classList.add('light-mode');
 }})();
@@ -1136,6 +1175,7 @@ elif active == "news":
 
 elif active == "loans":
     st.markdown('<div class="section-hdr">Bank Loans</div>', unsafe_allow_html=True)
+
     if "bank_open" not in st.session_state:
         st.session_state["bank_open"] = None
 
@@ -1163,10 +1203,6 @@ elif active == "loans":
     .bk-s .bk-hrate { color:#00C896; }
     .bk-m .bk-hrate { color:#ffd93d; }
     .bk-r .bk-hrate { color:#FF4D6A; }
-    /* Invisible overlay button that covers the bank card above it */
-    .bk-trigger { position:relative; height:0; overflow:visible; margin:0; padding:0; }
-    .bk-trigger > div[data-testid="stButton"] { position:absolute !important; bottom:0 !important; left:0 !important; right:0 !important; height:0 !important; }
-    .bk-trigger button { position:absolute !important; bottom:0 !important; left:0 !important; width:100% !important; height:120px !important; opacity:0 !important; cursor:pointer !important; border:none !important; background:transparent !important; z-index:10 !important; margin:0 !important; padding:0 !important; min-height:unset !important; transform:translateY(-100%) !important; }
     /* light mode */
     body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
     body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
@@ -1189,29 +1225,20 @@ elif active == "loans":
         bank_bal  = team.get(f"loan_{bk_id}", 0)
         used_pct  = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
         available = max(0, bk["cap"] - bank_bal)
-        is_open   = st.session_state["bank_open"] == bk_id
+        is_open   = st.session_state.get("bank_open") == bk_id
         cls       = css_map.get(bk["css"], "bk-s")
-        btn_key   = f"bk_btn_{bk_id}"
         chev_rot  = "180deg" if is_open else "0deg"
 
-        # Full HTML card — clicking fires hidden Streamlit button via JS
+        # Card onclick: set ?bank_open=bk_id in URL → Python reads on next autorefresh rerun
+        # No Streamlit button needed — pure JS navigation
         st.markdown(f"""
-        <div class="bk-wrap {cls}" id="bkwrap-{bk_id}" onclick="(function(){{
-          var wrap = document.getElementById('bkwrap-{bk_id}');
-          var container = wrap ? wrap.nextElementSibling : null;
-          if (container) {{
-            var btn = container.querySelector('button');
-            if (btn) {{ btn.click(); return; }}
-          }}
-          // fallback: search whole page
-          var all = document.querySelectorAll('.bk-trigger button');
-          for (var i=0; i<all.length; i++) {{
-            var p = all[i].closest('.bk-trigger');
-            if (p && p.previousElementSibling && p.previousElementSibling.id === 'bkwrap-{bk_id}') {{
-              all[i].click(); return;
-            }}
-          }}
-        }})()">
+        <div class="bk-wrap {cls}" id="bkwrap-{bk_id}"
+             style="cursor:pointer"
+             onclick="(function(){{
+               var url = new URL(window.location.href);
+               url.searchParams.set('bank_open', '{bk_id}');
+               window.location.href = url.toString();
+             }})()">
           <div class="bk-head {'open' if is_open else ''}">
             <div class="bk-head-top">
               <span class="bk-hname">{bk['name']}</span>
@@ -1222,13 +1249,6 @@ elif active == "loans":
             <div class="bk-hnote">{bk['note']}</div>
           </div>
         </div>""", unsafe_allow_html=True)
-
-        # Invisible full-card-cover button — no label visible, click toggles accordion
-        st.markdown('<div class="bk-trigger">', unsafe_allow_html=True)
-        if st.button("​", key=btn_key):  # zero-width space label = nothing visible
-            st.session_state["bank_open"] = bk_id if not is_open else None
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
         # Accordion
         if is_open:
