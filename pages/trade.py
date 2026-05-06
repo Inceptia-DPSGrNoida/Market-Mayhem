@@ -321,9 +321,9 @@ div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
 """, unsafe_allow_html=True)
 
 BANKS = {
-    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates.",             "borrow_options":[5000,10000,25000,50000]},
-    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams.",           "borrow_options":[10000,25000,50000,75000,100000]},
-    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted.", "borrow_options":[25000,50000,100000,150000,200000]},
+    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "min_borrow":5000,  "max_borrow":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates."},
+    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "min_borrow":40000, "max_borrow":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams."},
+    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "min_borrow":90000, "max_borrow":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted."},
 }
 
 def fmt(n): return f"₹{int(n):,}"
@@ -374,10 +374,11 @@ if not team:
                 if not team_name.strip():
                     st.error("Enter a team name to continue.")
                 else:
+                    normalized_name = team_name.strip().capitalize()
                     state = load_state()
                     new_tid = str(uuid.uuid4())[:8]
                     state["teams"][new_tid] = {
-                        "name": team_name.strip(),
+                        "name": normalized_name,
                         "participant_num": int(participant_num),
                         "cash": 0, "loan_balance": 0,
                         "loan_rbi_safe": 0, "loan_axis_mid": 0, "loan_hawala_risky": 0,
@@ -1138,27 +1139,58 @@ if active == "market":
             chart_color = "#00C896" if price >= display_hist[0] else "#FF4D6A"
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
-            df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
             _is_light = st.session_state.get("light_mode", False)
             _label_col = "rgba(30,60,30,0.7)"  if _is_light else "rgba(255,255,255,0.35)"
             _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
             _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
             _chart_type = st.session_state.get("chart_type", "line")
-            if _chart_type == "bar":
-                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
-            elif _chart_type == "candle":
-                # Simulate candle with tick marks — use area+line combo for visual effect
-                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
-                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
-                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col, tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)))
-                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+
+            if _chart_type == "candle":
+                # Build simulated OHLC from rolling windows of the history data
+                _n = len(display_hist)
+                _window = max(1, _n // max(1, min(20, _n)))  # aim for ~20 candles
+                _rows = []
+                for _s in range(0, _n, _window):
+                    _seg = display_hist[_s:_s+_window]
+                    if not _seg: continue
+                    _rows.append({
+                        "i": _s + len(_seg)//2,
+                        "open":  _seg[0],
+                        "close": _seg[-1],
+                        "high":  max(_seg),
+                        "low":   min(_seg),
+                    })
+                if len(_rows) < 2:
+                    _rows = [{"i":0,"open":display_hist[0],"close":display_hist[0],"high":display_hist[0],"low":display_hist[0]},
+                             {"i":1,"open":display_hist[-1],"close":display_hist[-1],"high":display_hist[-1],"low":display_hist[-1]}]
+                _df_c = pd.DataFrame(_rows)
+                _df_c["color"] = _df_c.apply(lambda r: "#00C896" if r["close"] >= r["open"] else "#FF4D6A", axis=1)
+                _df_c["bar_top"]    = _df_c[["open","close"]].max(axis=1)
+                _df_c["bar_bottom"] = _df_c[["open","close"]].min(axis=1)
+                _y_scale = alt.Scale(domain=[mn-pad, mx+pad])
+                _y_axis  = alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
+                                    tickColor=_tick_col, domainColor=_tick_col,
+                                    tickCount=4, format=",.0f", labelFont="Space Grotesk", labelFontSize=11)
+                _wick = alt.Chart(_df_c).mark_rule(strokeWidth=1.5).encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("low:Q", scale=_y_scale, axis=_y_axis),
+                    y2=alt.Y2("high:Q"),
+                    color=alt.Color("color:N", scale=None)
+                )
+                _body = alt.Chart(_df_c).mark_bar(width=6).encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("bar_bottom:Q", scale=_y_scale, axis=_y_axis),
+                    y2=alt.Y2("bar_top:Q"),
+                    color=alt.Color("color:N", scale=None)
+                )
+                chart = (_wick + _body).properties(height=220, background="transparent").configure_view(strokeWidth=0)
                 st.altair_chart(chart, use_container_width=True)
                 st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
                 continue
+
+            df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
+            if _chart_type == "bar":
+                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
             else:
                 _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
             chart = _mark.encode(
@@ -1243,14 +1275,14 @@ elif active == "loans":
         cls       = css_map.get(bk["css"], "bk-s")
         chev_rot  = "180deg" if is_open else "0deg"
 
-        # Card onclick: set ?bank_open=bk_id on PARENT window URL → Python reads on next rerun
+        # Card onclick: set ?bank_open=bk_id on PARENT window URL → Python reads on next autorefresh
         st.markdown(f"""
         <div class="bk-wrap {cls}" id="bkwrap-{bk_id}"
              style="cursor:pointer"
              onclick="(function(){{
                var url = new URL(window.parent.location.href);
                url.searchParams.set('bank_open', '{bk_id}');
-               window.parent.location.href = url.toString();
+               window.parent.history.replaceState({{}}, '', url.toString());
              }})()">
           <div class="bk-head {'open' if is_open else ''}">
             <div class="bk-head-top">
@@ -1271,24 +1303,34 @@ elif active == "loans":
             elif available <= 0:
                 st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Credit limit reached.</p>', unsafe_allow_html=True)
             else:
-                valid_amts = [a for a in bk["borrow_options"] if a <= available]
-                if valid_amts:
-                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 12px">Choose amount to borrow:</p>', unsafe_allow_html=True)
-                    bcols = st.columns(len(valid_amts))
-                    for i, amt in enumerate(valid_amts):
-                        with bcols[i]:
-                            st.markdown('<div class="loan-btn">', unsafe_allow_html=True)
-                            if st.button(fmt(amt), key=f"borrow_{bk_id}_{amt}", use_container_width=True):
-                                state = load_state(); team = state["teams"][tid]
-                                team["cash"] = team.get("cash", 0) + amt
-                                team["loan_balance"] = team.get("loan_balance", 0) + amt
-                                team[f"loan_{bk_id}"] = team.get(f"loan_{bk_id}", 0) + amt
-                                state["teams"][tid] = team; save_state(state)
-                                st.session_state["bank_open"] = None
-                                st.success(f"Borrowed {fmt(amt)} from {bk['name']}"); st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
+                min_b = bk.get("min_borrow", 5000)
+                max_b = min(bk.get("max_borrow", bk["cap"]), available)
+                if min_b > max_b:
+                    st.markdown(f'<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Only ₹{int(available):,} remaining — below minimum borrow of ₹{int(min_b):,}.</p>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">No valid amounts available.</p>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 10px">Choose amount (₹{int(min_b):,} – ₹{int(max_b):,}):</p>', unsafe_allow_html=True)
+                    borrow_key = f"borrow_amt_{bk_id}"
+                    if borrow_key not in st.session_state:
+                        st.session_state[borrow_key] = min_b
+                    borrow_amt = st.number_input(
+                        "Amount", min_value=int(min_b), max_value=int(max_b),
+                        step=1000, value=int(st.session_state.get(borrow_key, min_b)),
+                        key=borrow_key, label_visibility="collapsed"
+                    )
+                    interest_preview = borrow_amt * bk["rate"]
+                    st.markdown(f'<p style="font-size:11px;color:rgba(255,255,255,0.3);margin:4px 0 12px">Interest per round: <strong style="color:rgba(255,255,255,0.6)">{fmt(interest_preview)}</strong></p>', unsafe_allow_html=True)
+                    st.markdown('<div class="loan-btn">', unsafe_allow_html=True)
+                    if st.button(f"Borrow {fmt(borrow_amt)}", key=f"borrow_{bk_id}", use_container_width=True):
+                        state = load_state(); team = state["teams"][tid]
+                        team["cash"] = team.get("cash", 0) + borrow_amt
+                        team["loan_balance"] = team.get("loan_balance", 0) + borrow_amt
+                        team[f"loan_{bk_id}"] = team.get(f"loan_{bk_id}", 0) + borrow_amt
+                        state["teams"][tid] = team; save_state(state)
+                        st.session_state["bank_open"] = None
+                        try: del st.query_params["bank_open"]
+                        except: pass
+                        st.success(f"Borrowed {fmt(borrow_amt)} from {bk['name']}"); st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
     if phase == "between" and loan_balance > 0:
