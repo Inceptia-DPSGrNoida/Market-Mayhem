@@ -698,9 +698,14 @@ _stc.html(f"""
   // ── Build overlay + panel DOM once ──────────────────────────────────────
   var isLight = {'true' if _light else 'false'};
   var vol = {_vol};
+  var chartType = '{_chart}';
+  var intelPopup = {'true' if _intel_popup else 'false'};
 
   var SVG_SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd93d" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
   var SVG_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var SVG_LINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3,17 8,10 13,14 21,5"/></svg>';
+  var SVG_CANDLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="8" width="4" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="9" y1="18" x2="9" y2="22"/><rect x="13" y="6" width="4" height="8" rx="1"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="15" y1="14" x2="15" y2="20"/></svg>';
+  var SVG_BAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="17" y="9" width="4" height="12" rx="1"/></svg>';
 
   if (!P.getElementById('mm-spanel')) {{
     var ov = P.createElement('div'); ov.id = 'mm-soverlay';
@@ -710,6 +715,7 @@ _stc.html(f"""
         '<span class="mm-sph-title">Settings</span>' +
         '<div class="mm-sph-x" id="mm-sclose">&#x2715;</div>' +
       '</div>' +
+      // ── Appearance ───────────────────────────────────────────────────────
       '<div class="mm-ssec">' +
         '<div class="mm-slbl">Appearance</div>' +
         '<div class="mm-theme-row">' +
@@ -721,6 +727,33 @@ _stc.html(f"""
           '</div>' +
         '</div>' +
       '</div>' +
+      // ── Chart type ───────────────────────────────────────────────────────
+      '<div class="mm-ssec">' +
+        '<div class="mm-slbl">Chart Style</div>' +
+        '<div class="mm-theme-row">' +
+          '<div class="mm-tbtn ' + (chartType==='line' ? 't-active-chart' : '') + '" id="mm-chart-line">' +
+            SVG_LINE + '<span>Line</span>' +
+          '</div>' +
+          '<div class="mm-tbtn ' + (chartType==='candle' ? 't-active-chart' : '') + '" id="mm-chart-candle">' +
+            SVG_CANDLE + '<span>Candle</span>' +
+          '</div>' +
+          '<div class="mm-tbtn ' + (chartType==='bar' ? 't-active-chart' : '') + '" id="mm-chart-bar">' +
+            SVG_BAR + '<span>Bar</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      // ── Intel popup ──────────────────────────────────────────────────────
+      '<div class="mm-ssec">' +
+        '<div class="mm-slbl">Notifications</div>' +
+        '<div class="mm-tog-row">' +
+          '<span class="mm-tog-desc">Red popup when new Intel drops</span>' +
+          '<label class="mm-tog">' +
+            '<input type="checkbox" id="mm-intel-tog"' + (intelPopup ? ' checked' : '') + '>' +
+            '<span class="mm-tog-sl"></span>' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      // ── Music volume ─────────────────────────────────────────────────────
       '<div class="mm-ssec" style="border-bottom:none">' +
         '<div class="mm-slbl">Music Volume</div>' +
         '<div class="mm-svlbl">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>' +
@@ -757,6 +790,32 @@ _stc.html(f"""
     }}
     P.getElementById('mm-btn-light').addEventListener('click', function() {{ setTheme(true);  }});
     P.getElementById('mm-btn-dark').addEventListener('click',  function() {{ setTheme(false); }});
+
+    // Chart type buttons — update URL param so Python picks it up on next rerun
+    function setChart(type) {{
+      chartType = type;
+      ['line','candle','bar'].forEach(function(t) {{
+        var el = P.getElementById('mm-chart-' + t);
+        if (el) el.className = 'mm-tbtn' + (t === type ? ' t-active-chart' : '');
+      }});
+      var url = new URL(window.parent.location.href);
+      url.searchParams.set('chart', type);
+      window.parent.history.replaceState({{}}, '', url.toString());
+    }}
+    P.getElementById('mm-chart-line').addEventListener('click',   function() {{ setChart('line');   }});
+    P.getElementById('mm-chart-candle').addEventListener('click', function() {{ setChart('candle'); }});
+    P.getElementById('mm-chart-bar').addEventListener('click',    function() {{ setChart('bar');    }});
+
+    // Intel popup toggle
+    P.getElementById('mm-intel-tog').addEventListener('change', function() {{
+      intelPopup = this.checked;
+      var url = new URL(window.parent.location.href);
+      url.searchParams.set('intel_popup', intelPopup ? 'on' : 'off');
+      window.parent.history.replaceState({{}}, '', url.toString());
+      // Show/hide the floating popup immediately
+      var popup = P.getElementById('mm-intel-popup');
+      if (popup) popup.style.display = intelPopup ? 'flex' : 'none';
+    }});
 
     // Volume slider
     P.getElementById('mm-vol-sl').addEventListener('input', function() {{
@@ -884,6 +943,34 @@ for i, (p, lbl) in enumerate(zip(panel_keys, panel_labels)):
 active = st.session_state["active_panel"]
 if active == "news": st.session_state["intel_seen_count"] = new_count
 st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
+
+# ── Floating Intel popup (WhatsApp-style) ─────────────────────────────────────
+if _intel_popup and unseen_intel > 0 and active != "news":
+    st.markdown(f"""
+    <div id="mm-intel-popup" style="
+      position:fixed;bottom:28px;right:24px;z-index:9990;
+      display:flex;align-items:center;gap:12px;
+      background:#1a0a0e;border:1.5px solid rgba(255,77,106,0.5);
+      border-radius:16px;padding:12px 18px;
+      box-shadow:0 4px 24px rgba(255,77,106,0.25);
+      font-family:Inter,sans-serif;cursor:pointer;
+      animation:mm-pop-in 0.3s cubic-bezier(0.16,1,0.3,1)">
+      <div style="background:#FF4D6A;color:#fff;font-size:13px;font-weight:800;
+                  min-width:26px;height:26px;border-radius:99px;display:flex;
+                  align-items:center;justify-content:center;padding:0 6px;flex-shrink:0">
+        {unseen_intel}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#fff">New Intel</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.45)">Tap to view market intelligence</div>
+      </div>
+    </div>
+    <style>
+    @keyframes mm-pop-in {{
+      from {{ transform:translateY(20px);opacity:0; }}
+      to   {{ transform:translateY(0);opacity:1; }}
+    }}
+    </style>""", unsafe_allow_html=True)
 
 # ══ PANEL: MARKET ═════════════════════════════════════════════════════════════
 if active == "market":
