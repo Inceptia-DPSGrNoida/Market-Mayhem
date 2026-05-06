@@ -118,15 +118,15 @@ elif phase == "between":
 def fluctuate_prices(state, round_news):
     companies = state["companies"]
     COMPANY_VOL = {
-        "zora":      {"range": (0.005, 0.020), "bias": 0.48},
-        "streamvx":  {"range": (0.050, 0.130), "bias": 0.44},
-        "freshco":   {"range": (0.004, 0.018), "bias": 0.49},
-        "voltex":    {"range": (0.030, 0.080), "bias": 0.43},
-        "mediq":     {"range": (0.025, 0.090), "bias": 0.45},
-        "skylink":   {"range": (0.060, 0.140), "bias": 0.44},
-        "swifthaul": {"range": (0.015, 0.050), "bias": 0.46},
-        "crownmart": {"range": (0.040, 0.110), "bias": 0.43},
-        "shieldgen": {"range": (0.006, 0.022), "bias": 0.49},
+        "zora":      {"range": (0.005, 0.018), "bias": 0.48},
+        "streamvx":  {"range": (0.030, 0.080), "bias": 0.45},
+        "freshco":   {"range": (0.004, 0.016), "bias": 0.49},
+        "voltex":    {"range": (0.020, 0.060), "bias": 0.44},
+        "mediq":     {"range": (0.020, 0.070), "bias": 0.46},
+        "skylink":   {"range": (0.035, 0.090), "bias": 0.44},
+        "swifthaul": {"range": (0.012, 0.040), "bias": 0.46},
+        "crownmart": {"range": (0.025, 0.075), "bias": 0.44},
+        "shieldgen": {"range": (0.005, 0.020), "bias": 0.49},
     }
     prev_holdings = state.get("prev_holdings", {cid: 0 for cid in companies})
     FLOAT_SIZE = 10000
