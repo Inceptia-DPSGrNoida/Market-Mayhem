@@ -391,12 +391,12 @@ if not team:
                     st.rerun()
     st.markdown('<h2 style="font-family:Space Grotesk,sans-serif;font-size:28px;font-weight:700;color:#fff;margin:48px 0 20px;letter-spacing:-0.5px">How it works</h2>', unsafe_allow_html=True)
     rules = [
-        ("Register", "Enter your team code. Earn your way up from 0 to Millions."),
-        ("Pick your bank", "Choose your bank to borrow from. Choose wisely."),
-        ("Read the market", "9 companies to choose from. All with varying financial strength, and market position."),
+        ("Register", "Enter your city name. You start with ₹0 — take a loan to begin trading."),
+        ("Pick your bank", "3 banks to borrow from. Each has its own terms, limits, and interest rates. Choose wisely."),
+        ("Read the market", "9 companies across sectors. Each has a personality, risk level, and backstory."),
         ("Trade in rounds", "4 rounds of live trading. Buy, sell, or short before each round closes."),
-        ("Navigate the news", "News drops throughout the game. Some is real. Some is noise. Learn to trust the truth."),
-        ("Win by net worth", "Team with the highest net worth wins it all."),
+        ("Navigate the news", "News drops throughout the game. Some is real. Some is noise. You decide."),
+        ("Win by net worth", "Cash + portfolio − loan balance at the end of the final round. Highest wins."),
     ]
     for i, (title, desc) in enumerate(rules, 1):
         st.markdown(f'<div class="rule-card"><div class="rule-num">{str(i).zfill(2)}</div><div class="rule-content"><h4>{title}</h4><p>{desc}</p></div></div>', unsafe_allow_html=True)
@@ -929,7 +929,7 @@ st.markdown(f"""
   <div class="metric-card"><div class="label">Cash</div><div class="value" style="color:#00C896">{fmt(team['cash'])}</div><div class="delta" style="color:rgba(0,200,150,0.45)">Available</div></div>
   <div class="metric-card"><div class="label">Portfolio</div><div class="value" style="color:#ffd93d">{fmt(port_val)}</div><div class="delta" style="color:rgba(255,211,61,0.45)">Holdings value</div></div>
   <div class="metric-card"><div class="label">Loan Balance</div><div class="value" style="color:#a78bfa">{fmt(loan_balance)}</div><div class="delta" style="color:rgba(167,139,250,0.4)">Outstanding debt</div></div>
-  <div class="metric-card"><div class="label">Net Worth</div><div class="value" style="color:#4f8ef7">{fmt(net_worth)}</div><div class="delta" style="color:rgba(79,142,247,0.45)">Assets - Liabilities</div></div>
+  <div class="metric-card"><div class="label">Net Worth</div><div class="value" style="color:#4f8ef7">{fmt(net_worth)}</div><div class="delta" style="color:rgba(79,142,247,0.45)">Cash + portfolio − loan</div></div>
 </div>""", unsafe_allow_html=True)
 
 can_trade = phase == "trading"
