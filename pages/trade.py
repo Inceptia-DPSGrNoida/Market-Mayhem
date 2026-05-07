@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 BREAK_DURATION = 300
 
 st.set_page_config(page_title="Market Mayhem — Inceptia", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
-st_autorefresh(interval=3000, key="trade_refresh")
+st_autorefresh(interval=1000, key="trade_refresh")
 
 # FIX 1: JS-driven countdown — no Streamlit reruns needed for the timer
 # Timer runs purely in JS, progress bar animates smoothly in CSS
@@ -321,9 +321,9 @@ div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
 """, unsafe_allow_html=True)
 
 BANKS = {
-    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "min_borrow":5000,  "max_borrow":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates."},
-    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "min_borrow":40000, "max_borrow":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams."},
-    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "min_borrow":90000, "max_borrow":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted."},
+    "rbi_safe":     {"name":"RBI Trustbank",     "rate":0.07,  "cap":50000,  "css":"bank-safe",  "rate_label":"7% / round",  "note":"Regulated. Stable. Low ceiling but fair rates.",             "borrow_options":[5000,10000,25000,50000]},
+    "axis_mid":     {"name":"Axis Capital",       "rate":0.12,  "cap":100000, "css":"bank-mid",   "rate_label":"12% / round", "note":"Mid-tier lender. Decent limit for growing teams.",           "borrow_options":[10000,25000,50000,75000,100000]},
+    "hawala_risky": {"name":"BlackRock Ventures", "rate":0.18,  "cap":200000, "css":"bank-risky", "rate_label":"18% / round", "note":"High credit line. Aggressive interest. Not for the faint-hearted.", "borrow_options":[25000,50000,100000,150000,200000]},
 }
 
 def fmt(n): return f"₹{int(n):,}"
@@ -374,11 +374,10 @@ if not team:
                 if not team_name.strip():
                     st.error("Enter a team name to continue.")
                 else:
-                    normalized_name = team_name.strip().capitalize()
                     state = load_state()
                     new_tid = str(uuid.uuid4())[:8]
                     state["teams"][new_tid] = {
-                        "name": normalized_name,
+                        "name": team_name.strip(),
                         "participant_num": int(participant_num),
                         "cash": 0, "loan_balance": 0,
                         "loan_rbi_safe": 0, "loan_axis_mid": 0, "loan_hawala_risky": 0,
@@ -543,15 +542,17 @@ if phase == "trading":
     changed = False
     for cid, c in state["companies"].items():
         hist = team["price_history"].get(cid, [])
-        # Append micro price every tick for a smooth live chart
         micro_p = st.session_state["micro_prices"].get(cid, c["price"])
         hist.append(micro_p)
-        if len(hist) > 60: hist = hist[-60:]  # keep last 60 points
+        if len(hist) > 60: hist = hist[-60:]
         team["price_history"][cid] = hist
         changed = True
     if changed:
-        state["teams"][tid] = team
-        save_state(state)
+        # Only persist price history every 5 ticks (~5s) to reduce disk I/O lag
+        tick = st.session_state.get("micro_tick", 0)
+        if tick % 5 == 0:
+            state["teams"][tid] = team
+            save_state(state)
 
 # FIX 4: Game over screen — show immediately after ticker, no banner, no progress
 if phase == "ended":
@@ -569,59 +570,20 @@ if phase == "ended":
 # ── Header + Settings (non-ended phases only) ────────────────────────────────
 participant_tag = f' &nbsp;<span style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.35)">· P{team.get("participant_num","")}</span>' if team.get("participant_num") else ""
 
-# Settings state — read from query params so JS can write them without a rerun
-_qp = st.query_params
-if "music_volume" not in st.session_state:
-    st.session_state["music_volume"] = int(_qp.get("vol", 50))
-if "light_mode" not in st.session_state:
-    st.session_state["light_mode"] = _qp.get("theme", "dark") == "light"
-if "chart_type" not in st.session_state:
-    st.session_state["chart_type"] = _qp.get("chart", "line")
-if "intel_popup" not in st.session_state:
-    st.session_state["intel_popup"] = _qp.get("intel_popup", "off") == "on"
+# ── Settings: read from session_state only (JS writes to localStorage, Python reads nothing)
+# Chart type and bank_open are the only things Python needs — driven by Streamlit buttons below
+if "chart_type"  not in st.session_state: st.session_state["chart_type"]  = "line"
+if "intel_popup" not in st.session_state: st.session_state["intel_popup"] = False
+if "bank_open"   not in st.session_state: st.session_state["bank_open"]   = None
+if "music_volume" not in st.session_state: st.session_state["music_volume"] = 50
+if "light_mode"  not in st.session_state: st.session_state["light_mode"]  = False
 
-# Handle query param updates from the JS settings panel
-_qp_vol   = _qp.get("vol")
-_qp_theme = _qp.get("theme")
-_qp_chart = _qp.get("chart")
-_qp_intel = _qp.get("intel_popup")
-_qp_bank  = _qp.get("bank_open")
-if _qp_vol is not None:
-    try:
-        _v = int(_qp_vol)
-        if _v != st.session_state["music_volume"]:
-            st.session_state["music_volume"] = _v
-    except ValueError:
-        pass
-if _qp_theme is not None:
-    _lm = (_qp_theme == "light")
-    if _lm != st.session_state["light_mode"]:
-        st.session_state["light_mode"] = _lm
-if _qp_chart is not None and _qp_chart in ("line", "candle", "bar"):
-    if _qp_chart != st.session_state["chart_type"]:
-        st.session_state["chart_type"] = _qp_chart
-if _qp_intel is not None:
-    _ip = (_qp_intel == "on")
-    if _ip != st.session_state["intel_popup"]:
-        st.session_state["intel_popup"] = _ip
-if _qp_bank is not None:
-    # Toggle: if same bank clicked again, close it
-    if st.session_state.get("bank_open") == _qp_bank:
-        st.session_state["bank_open"] = None
-    else:
-        st.session_state["bank_open"] = _qp_bank
-    # Clear param from URL so next autorefresh doesn't re-toggle
-    try:
-        del st.query_params["bank_open"]
-    except Exception:
-        pass
+_chart       = st.session_state["chart_type"]
+_intel_popup = st.session_state["intel_popup"]
+_vol         = st.session_state["music_volume"]
+_light       = st.session_state["light_mode"]
 
-_vol   = st.session_state["music_volume"]
-_light = st.session_state["light_mode"]
-_chart = st.session_state.get("chart_type", "line")
-_intel_popup = st.session_state.get("intel_popup", False)
-
-# Header (plain HTML — renders fine, no scripts needed here)
+# ── Header ───────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
   <div>
@@ -640,251 +602,202 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Settings panel — inject CSS + DOM + JS all into the PARENT document from the iframe
+# ── Settings panel — pure JS/localStorage, zero Python involvement ───────────
+# Injected into parent <head> once via a stable script tag id.
+# Every iframe reload calls mmSettingsInit() which is idempotent.
 import streamlit.components.v1 as _stc
-_stc.html(f"""
+_stc.html("""
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:transparent">
 <script>
-(function(){{
-  var P = window.parent.document;
+(function(){
+  var W = window.parent;
+  var P = W.document;
 
-  // ── Inject CSS into parent <head> once ──────────────────────────────────
-  if (!P.getElementById('mm-settings-css')) {{
-    var s = P.createElement('style');
-    s.id = 'mm-settings-css';
+  // ── Inject CSS once ───────────────────────────────────────────────────────
+  if (!P.getElementById('mm-settings-css')) {
+    var s = P.createElement('style'); s.id = 'mm-settings-css';
     s.textContent = `
-      #mm-soverlay {{
-        display:none !important;position:fixed;inset:0;z-index:9998;
-        background:rgba(0,0,0,0.45);
-      }}
-      #mm-soverlay.sp-open {{ display:block !important; }}
-      #mm-spanel {{
+      #mm-soverlay { display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45); }
+      #mm-soverlay.open { display:block; }
+      #mm-spanel {
         position:fixed;top:0;right:0;width:300px;height:100vh;
         background:#0d0f1a;border-left:1px solid #1e2535;
         z-index:9999;padding:28px 22px;overflow-y:auto;box-sizing:border-box;
         transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.16,1,0.3,1);
-      }}
-      #mm-spanel.sp-open {{ transform:translateX(0); }}
-      #mm-soverlay.sp-open {{ display:block; }}
-      .mm-sph {{ display:flex;justify-content:space-between;align-items:center;margin-bottom:28px; }}
-      .mm-sph-title {{ font-family:Space Grotesk,sans-serif;font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px; }}
-      .mm-sph-x {{ width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
-                   background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);font-size:15px;
-                   cursor:pointer;display:flex;align-items:center;justify-content:center;
-                   transition:background .15s,color .15s,border-color .15s; }}
-      .mm-sph-x:hover {{ background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }}
-      .mm-ssec {{ margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }}
-      .mm-slbl {{ font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }}
-      .mm-theme-row {{ display:flex;gap:10px; }}
-      .mm-tbtn {{ flex:1;padding:14px 8px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:all 0.18s;user-select:none; }}
-      .mm-tbtn:hover {{ background:rgba(255,255,255,0.08); }}
-      .mm-tbtn.t-active-light {{ border-color:#ffd93d;background:rgba(255,211,61,0.1); }}
-      .mm-tbtn.t-active-dark  {{ border-color:#a78bfa;background:rgba(167,139,250,0.1); }}
-      .mm-tbtn.t-active-chart {{ border-color:#00C896;background:rgba(0,200,150,0.1); }}
-      .mm-tbtn svg {{ width:28px;height:28px; }}
-      .mm-tbtn span {{ font-size:12px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.3px; }}
-      .mm-tbtn.t-active-light span {{ color:#ffd93d; }}
-      .mm-tbtn.t-active-dark  span {{ color:#a78bfa; }}
-      .mm-tbtn.t-active-chart span {{ color:#00C896; }}
-      .mm-svlbl {{ font-size:14px;color:rgba(255,255,255,0.8);font-weight:500;margin-bottom:12px; }}
-      .mm-svrow {{ display:flex;align-items:center;gap:10px; }}
-      .mm-svrow input[type=range] {{
-        flex:1;-webkit-appearance:none;height:4px;border-radius:2px;
-        background:rgba(255,255,255,0.12);outline:none;cursor:pointer;
-      }}
-      .mm-svrow input[type=range]::-webkit-slider-thumb {{
-        -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
-        background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2);
-      }}
-      .mm-svval {{ font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }}
-      .mm-tog-row {{ display:flex;align-items:center;justify-content:space-between;gap:10px; }}
-      .mm-tog-desc {{ font-size:13px;color:rgba(255,255,255,0.6);flex:1;line-height:1.4; }}
-      .mm-tog {{ position:relative;width:44px;height:24px;flex-shrink:0; }}
-      .mm-tog input {{ opacity:0;width:0;height:0; }}
-      .mm-tog-sl {{ position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border-radius:99px;transition:background 0.2s; }}
-      .mm-tog-sl:before {{ content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:rgba(255,255,255,0.4);border-radius:50%;transition:transform 0.2s,background 0.2s; }}
-      .mm-tog input:checked + .mm-tog-sl {{ background:rgba(255,77,106,0.35); }}
-      .mm-tog input:checked + .mm-tog-sl:before {{ transform:translateX(20px);background:#FF4D6A; }}
+      }
+      #mm-spanel.open { transform:translateX(0); }
+      .mm-sph { display:flex;justify-content:space-between;align-items:center;margin-bottom:28px; }
+      .mm-sph-title { font-family:Space Grotesk,sans-serif;font-size:18px;font-weight:700;color:#fff; }
+      .mm-sph-x { width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
+                  background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.5);font-size:15px;
+                  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s; }
+      .mm-sph-x:hover { background:rgba(255,77,106,0.15);color:#FF4D6A;border-color:rgba(255,77,106,0.3); }
+      .mm-ssec { margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid rgba(255,255,255,0.05); }
+      .mm-slbl { font-size:11px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:12px; }
+      .mm-row  { display:flex;gap:10px; }
+      .mm-tbtn { flex:1;padding:14px 8px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.1);
+                 background:rgba(255,255,255,0.04);cursor:pointer;display:flex;flex-direction:column;
+                 align-items:center;gap:8px;transition:all 0.18s;user-select:none; }
+      .mm-tbtn:hover { background:rgba(255,255,255,0.08); }
+      .mm-tbtn.act-light { border-color:#ffd93d !important;background:rgba(255,211,61,0.1) !important; }
+      .mm-tbtn.act-dark  { border-color:#a78bfa !important;background:rgba(167,139,250,0.1) !important; }
+      .mm-tbtn.act-chart { border-color:#00C896 !important;background:rgba(0,200,150,0.1) !important; }
+      .mm-tbtn svg { width:28px;height:28px; }
+      .mm-tbtn .lbl { font-size:12px;font-weight:600;color:rgba(255,255,255,0.45); }
+      .mm-tbtn.act-light .lbl { color:#ffd93d; }
+      .mm-tbtn.act-dark  .lbl { color:#a78bfa; }
+      .mm-tbtn.act-chart .lbl { color:#00C896; }
+      .mm-vrow { display:flex;align-items:center;gap:10px; }
+      .mm-vrow input[type=range] { flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,0.12);outline:none;cursor:pointer; }
+      .mm-vrow input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#00C896;cursor:pointer;box-shadow:0 0 0 3px rgba(0,200,150,0.2); }
+      .mm-vval { font-size:13px;color:rgba(255,255,255,0.4);min-width:28px;text-align:right;font-family:monospace; }
+      .mm-tog-row { display:flex;align-items:center;justify-content:space-between;gap:10px; }
+      .mm-tog-desc { font-size:13px;color:rgba(255,255,255,0.6);flex:1; }
+      .mm-tog { position:relative;width:44px;height:24px;flex-shrink:0; }
+      .mm-tog input { opacity:0;width:0;height:0; }
+      .mm-tog-sl { position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border-radius:99px;transition:background 0.2s; }
+      .mm-tog-sl:before { content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:rgba(255,255,255,0.4);border-radius:50%;transition:transform 0.2s; }
+      .mm-tog input:checked + .mm-tog-sl { background:rgba(255,77,106,0.35); }
+      .mm-tog input:checked + .mm-tog-sl:before { transform:translateX(20px);background:#FF4D6A; }
     `;
     P.head.appendChild(s);
-  }}
+  }
 
-  // ── Build overlay + panel DOM once ──────────────────────────────────────
-  var isLight = {'true' if _light else 'false'};
-  var vol = {_vol};
-  var chartType = '{_chart}';
-  var intelPopup = {'true' if _intel_popup else 'false'};
+  // ── localStorage helpers ─────────────────────────────────────────────────
+  function lsGet(k, def) { try { return localStorage.getItem(k) || def; } catch(e) { return def; } }
+  function lsSet(k, v)   { try { localStorage.setItem(k, v); } catch(e) {} }
 
-  var SVG_SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd93d" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-  var SVG_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  var SVG_LINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3,17 8,10 13,14 21,5"/></svg>';
-  var SVG_CANDLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="8" width="4" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="9" y1="18" x2="9" y2="22"/><rect x="13" y="6" width="4" height="8" rx="1"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="15" y1="14" x2="15" y2="20"/></svg>';
-  var SVG_BAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="17" y="9" width="4" height="12" rx="1"/></svg>';
+  // ── Build panel DOM once ─────────────────────────────────────────────────
+  var SVGS = {
+    sun:    '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd93d" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
+    moon:   '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    line:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3,17 8,10 13,14 21,5"/></svg>',
+    candle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="8" width="4" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="9" y1="18" x2="9" y2="22"/><rect x="13" y="6" width="4" height="8" rx="1"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="15" y1="14" x2="15" y2="20"/></svg>',
+    bar:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="17" y="9" width="4" height="12" rx="1"/></svg>'
+  };
 
-  if (!P.getElementById('mm-spanel')) {{
+  if (!P.getElementById('mm-spanel')) {
+    var vol       = parseInt(lsGet('mm_vol','50'));
+    var isLight   = lsGet('mm_theme','dark') === 'light';
+    var chartType = lsGet('mm_chart','line');
+    var intelOn   = lsGet('mm_intel','off') === 'on';
+
+    // Apply theme immediately
+    if (isLight) P.body.classList.add('light-mode');
+
     var ov = P.createElement('div'); ov.id = 'mm-soverlay';
     var pn = P.createElement('div'); pn.id = 'mm-spanel';
-    pn.innerHTML =
-      '<div class="mm-sph">' +
-        '<span class="mm-sph-title">Settings</span>' +
-        '<div class="mm-sph-x" id="mm-sclose">&#x2715;</div>' +
-      '</div>' +
-      // ── Appearance ───────────────────────────────────────────────────────
-      '<div class="mm-ssec">' +
-        '<div class="mm-slbl">Appearance</div>' +
-        '<div class="mm-theme-row">' +
-          '<div class="mm-tbtn ' + (!isLight ? '' : 't-active-light') + '" id="mm-btn-light">' +
-            SVG_SUN + '<span>Light</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (isLight ? '' : 't-active-dark') + '" id="mm-btn-dark">' +
-            SVG_MOON + '<span>Dark</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      // ── Chart type ───────────────────────────────────────────────────────
-      '<div class="mm-ssec">' +
-        '<div class="mm-slbl">Chart Style</div>' +
-        '<div class="mm-theme-row">' +
-          '<div class="mm-tbtn ' + (chartType==='line' ? 't-active-chart' : '') + '" id="mm-chart-line">' +
-            SVG_LINE + '<span>Line</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (chartType==='candle' ? 't-active-chart' : '') + '" id="mm-chart-candle">' +
-            SVG_CANDLE + '<span>Candle</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (chartType==='bar' ? 't-active-chart' : '') + '" id="mm-chart-bar">' +
-            SVG_BAR + '<span>Bar</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      // ── Intel popup ──────────────────────────────────────────────────────
-      '<div class="mm-ssec">' +
-        '<div class="mm-slbl">Notifications</div>' +
-        '<div class="mm-tog-row">' +
-          '<span class="mm-tog-desc">Red popup when new Intel drops</span>' +
-          '<label class="mm-tog">' +
-            '<input type="checkbox" id="mm-intel-tog"' + (intelPopup ? ' checked' : '') + '>' +
-            '<span class="mm-tog-sl"></span>' +
-          '</label>' +
-        '</div>' +
-      '</div>' +
-      // ── Music volume ─────────────────────────────────────────────────────
-      '<div class="mm-ssec" style="border-bottom:none">' +
-        '<div class="mm-slbl">Music Volume</div>' +
-        '<div class="mm-svlbl">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>' +
-        '<div class="mm-svrow">' +
-          '<span style="font-size:15px">&#x1F508;</span>' +
-          '<input type="range" id="mm-vol-sl" min="0" max="100" value="' + vol + '">' +
-          '<span style="font-size:15px">&#x1F50A;</span>' +
-          '<span class="mm-svval" id="mm-vval">' + vol + '</span>' +
-        '</div>' +
-      '</div>';
+    pn.innerHTML = `
+      <div class="mm-sph">
+        <span class="mm-sph-title">Settings</span>
+        <div class="mm-sph-x" id="mm-sclose">&#x2715;</div>
+      </div>
+      <div class="mm-ssec">
+        <div class="mm-slbl">Appearance</div>
+        <div class="mm-row">
+          <div class="mm-tbtn" id="mm-btn-light">${SVGS.sun}<span class="lbl">Light</span></div>
+          <div class="mm-tbtn" id="mm-btn-dark">${SVGS.moon}<span class="lbl">Dark</span></div>
+        </div>
+      </div>
+      <div class="mm-ssec">
+        <div class="mm-slbl">Chart Style</div>
+        <div class="mm-row">
+          <div class="mm-tbtn" id="mm-chart-line">${SVGS.line}<span class="lbl">Line</span></div>
+          <div class="mm-tbtn" id="mm-chart-candle">${SVGS.candle}<span class="lbl">Candle</span></div>
+          <div class="mm-tbtn" id="mm-chart-bar">${SVGS.bar}<span class="lbl">Bar</span></div>
+        </div>
+      </div>
+      <div class="mm-ssec">
+        <div class="mm-slbl">Notifications</div>
+        <div class="mm-tog-row">
+          <span class="mm-tog-desc">Red popup for new Intel</span>
+          <label class="mm-tog"><input type="checkbox" id="mm-intel-tog"><span class="mm-tog-sl"></span></label>
+        </div>
+      </div>
+      <div class="mm-ssec" style="border-bottom:none">
+        <div class="mm-slbl">Music Volume</div>
+        <div class="mm-vrow">
+          <span style="font-size:15px">&#x1F508;</span>
+          <input type="range" id="mm-vol-sl" min="0" max="100" value="${vol}">
+          <span style="font-size:15px">&#x1F50A;</span>
+          <span class="mm-vval" id="mm-vval">${vol}</span>
+        </div>
+      </div>
+    `;
     P.body.appendChild(ov);
     P.body.appendChild(pn);
 
-    // Events
-    function openPanel()  {{ pn.classList.add('sp-open'); ov.classList.add('sp-open'); }}
-    function closePanel() {{ pn.classList.remove('sp-open'); ov.classList.remove('sp-open'); }}
+    // ── Open / close ────────────────────────────────────────────────────────
+    function openPanel()  { pn.classList.add('open'); ov.classList.add('open'); }
+    function closePanel() { pn.classList.remove('open'); ov.classList.remove('open'); }
     ov.addEventListener('click', closePanel);
     P.getElementById('mm-sclose').addEventListener('click', closePanel);
 
-    // Gear button — poll until the gear div exists in the parent page
-    (function tryGear() {{
-      var g = P.getElementById('mm-gear-btn');
-      if (g) {{ g.onclick = openPanel; }}
-      else   {{ setTimeout(tryGear, 150); }}
-    }})();
-
-    // Sun/Moon theme buttons
-    function setTheme(light) {{
+    // ── Theme ────────────────────────────────────────────────────────────────
+    function applyTheme(light) {
       isLight = light;
-      P.getElementById('mm-btn-light').className = 'mm-tbtn' + (light ? ' t-active-light' : '');
-      P.getElementById('mm-btn-dark').className  = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
+      lsSet('mm_theme', light ? 'light' : 'dark');
+      P.getElementById('mm-btn-light').className = 'mm-tbtn' + (light  ? ' act-light' : '');
+      P.getElementById('mm-btn-dark').className  = 'mm-tbtn' + (!light ? ' act-dark'  : '');
       if (light) P.body.classList.add('light-mode');
       else       P.body.classList.remove('light-mode');
-    }}
-    P.getElementById('mm-btn-light').addEventListener('click', function() {{ setTheme(true);  }});
-    P.getElementById('mm-btn-dark').addEventListener('click',  function() {{ setTheme(false); }});
+    }
+    applyTheme(isLight);
+    P.getElementById('mm-btn-light').addEventListener('click', function() { applyTheme(true);  });
+    P.getElementById('mm-btn-dark').addEventListener('click',  function() { applyTheme(false); });
 
-    // Chart type buttons — update URL param so Python picks it up on next rerun
-    function setChart(type) {{
+    // ── Chart type ───────────────────────────────────────────────────────────
+    function applyChart(type) {
       chartType = type;
-      ['line','candle','bar'].forEach(function(t) {{
+      lsSet('mm_chart', type);
+      ['line','candle','bar'].forEach(function(t) {
         var el = P.getElementById('mm-chart-' + t);
-        if (el) el.className = 'mm-tbtn' + (t === type ? ' t-active-chart' : '');
-      }});
-      var url = new URL(window.parent.location.href);
-      url.searchParams.set('chart', type);
-      window.parent.history.replaceState({{}}, '', url.toString());
-    }}
-    P.getElementById('mm-chart-line').addEventListener('click',   function() {{ setChart('line');   }});
-    P.getElementById('mm-chart-candle').addEventListener('click', function() {{ setChart('candle'); }});
-    P.getElementById('mm-chart-bar').addEventListener('click',    function() {{ setChart('bar');    }});
+        if (el) el.className = 'mm-tbtn' + (t === type ? ' act-chart' : '');
+      });
+    }
+    applyChart(chartType);
+    ['line','candle','bar'].forEach(function(t) {
+      P.getElementById('mm-chart-' + t).addEventListener('click', function() { applyChart(t); });
+    });
 
-    // Intel popup toggle
-    P.getElementById('mm-intel-tog').addEventListener('change', function() {{
-      intelPopup = this.checked;
-      var url = new URL(window.parent.location.href);
-      url.searchParams.set('intel_popup', intelPopup ? 'on' : 'off');
-      window.parent.history.replaceState({{}}, '', url.toString());
-      // Show/hide the floating popup immediately
-      var popup = P.getElementById('mm-intel-popup');
-      if (popup) popup.style.display = intelPopup ? 'flex' : 'none';
-    }});
+    // ── Intel toggle ─────────────────────────────────────────────────────────
+    var intelTog = P.getElementById('mm-intel-tog');
+    intelTog.checked = intelOn;
+    intelTog.addEventListener('change', function() {
+      lsSet('mm_intel', this.checked ? 'on' : 'off');
+    });
 
-    // Volume slider
-    P.getElementById('mm-vol-sl').addEventListener('input', function() {{
-      P.getElementById('mm-vval').textContent = this.value;
+    // ── Volume slider — updates audio directly, no Python needed ─────────────
+    var volSl = P.getElementById('mm-vol-sl');
+    volSl.addEventListener('input', function() {
+      var v = parseInt(this.value);
+      P.getElementById('mm-vval').textContent = v;
+      lsSet('mm_vol', v);
       var audio = P.getElementById('mm-bg-audio');
-      if (audio) audio.volume = parseInt(this.value) / 100;
-    }});
-  }} else {{
-    // Panel already in DOM — just sync volume slider
-    var sl = P.getElementById('mm-vol-sl');
-    if (sl) sl.value = vol;
-  }}
+      if (audio) audio.volume = v / 100;
+    });
 
-  // ── Always re-wire gear + close on every rerun (iframe refreshes, parent DOM persists) ──
-  (function rewire() {{
-    var pn  = P.getElementById('mm-spanel');
-    var ov  = P.getElementById('mm-soverlay');
-    var cls = P.getElementById('mm-sclose');
-    var g   = P.getElementById('mm-gear-btn');
-    if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
+    // Store refs on window.parent so gear rewire can reach them
+    W.__mmOpen  = openPanel;
+    W.__mmClose = closePanel;
+  }
 
-    // Replace overlay node first — drop stale listeners, never carry sp-open state
-    var ov2 = P.createElement('div');
-    ov2.id = 'mm-soverlay';
-    ov.parentNode.replaceChild(ov2, ov);
+  // ── Re-wire gear button every iframe refresh (it's recreated by Streamlit) ──
+  function wireGear() {
+    var g = P.getElementById('mm-gear-btn');
+    if (g) {
+      g.onclick = function() { if (W.__mmOpen) W.__mmOpen(); };
+    } else {
+      setTimeout(wireGear, 100);
+    }
+  }
+  wireGear();
 
-    function openPanel()  {{ pn.classList.add('sp-open'); ov2.classList.add('sp-open'); }}
-    function closePanel() {{ pn.classList.remove('sp-open'); ov2.classList.remove('sp-open'); }}
+  // ── Apply theme on every refresh (body class is lost when Streamlit re-renders) ──
+  if (lsGet('mm_theme','dark') === 'light') P.body.classList.add('light-mode');
+  else P.body.classList.remove('light-mode');
 
-    ov2.addEventListener('click', closePanel);
-
-    // Replace close button to drop stale listeners
-    if (cls) {{
-      var cls2 = cls.cloneNode(true);
-      cls.parentNode.replaceChild(cls2, cls);
-      cls2.addEventListener('click', closePanel);
-    }}
-
-    if (g) {{ g.onclick = openPanel; }}
-    else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
-
-    // Sync chart type buttons active state on every rerun
-    ['line','candle','bar'].forEach(function(t) {{
-      var el = P.getElementById('mm-chart-' + t);
-      if (el) el.className = 'mm-tbtn' + (t === chartType ? ' t-active-chart' : '');
-    }});
-    // Sync theme buttons
-    var bl = P.getElementById('mm-btn-light');
-    var bd = P.getElementById('mm-btn-dark');
-    if (bl) bl.className = 'mm-tbtn' + (isLight ? ' t-active-light' : '');
-    if (bd) bd.className = 'mm-tbtn' + (!isLight ? ' t-active-dark'  : '');
-  }})();
-
-  if (isLight) P.body.classList.add('light-mode');
-}})();
+})();
 </script>
 </body></html>
 """, height=0)
@@ -998,12 +911,13 @@ active = st.session_state["active_panel"]
 if active == "news": st.session_state["intel_seen_count"] = new_count
 st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
-# ── Floating Intel popup (WhatsApp-style) ─────────────────────────────────────
-if _intel_popup and unseen_intel > 0 and active != "news":
+# ── Floating Intel popup — shown when intel_popup enabled in settings ─────────
+# Check localStorage via a JS component; Python always renders it, JS shows/hides
+if unseen_intel > 0 and active != "news":
     st.markdown(f"""
     <div id="mm-intel-popup" style="
       position:fixed;bottom:28px;right:24px;z-index:9990;
-      display:flex;align-items:center;gap:12px;
+      display:none;align-items:center;gap:12px;
       background:#1a0a0e;border:1.5px solid rgba(255,77,106,0.5);
       border-radius:16px;padding:12px 18px;
       box-shadow:0 4px 24px rgba(255,77,106,0.25);
@@ -1020,11 +934,46 @@ if _intel_popup and unseen_intel > 0 and active != "news":
       </div>
     </div>
     <style>
-    @keyframes mm-pop-in {{
-      from {{ transform:translateY(20px);opacity:0; }}
-      to   {{ transform:translateY(0);opacity:1; }}
-    }}
+    @keyframes mm-pop-in {{ from {{ transform:translateY(20px);opacity:0; }} to {{ transform:translateY(0);opacity:1; }} }}
     </style>""", unsafe_allow_html=True)
+
+# JS: show intel popup based on localStorage setting, wire click to Intel nav button
+import streamlit.components.v1 as _stc_popup
+_stc_popup.html("""
+<script>
+(function() {
+  var P = window.parent.document;
+  function lsGet(k,d) { try { return localStorage.getItem(k)||d; } catch(e){return d;} }
+
+  function wirePopup() {
+    var popup = P.getElementById('mm-intel-popup');
+    if (!popup) return;
+
+    // Show/hide based on setting
+    var on = lsGet('mm_intel','off') === 'on';
+    popup.style.display = on ? 'flex' : 'none';
+
+    // Click → find and click the Intel nav button
+    if (!popup.__wired) {
+      popup.__wired = true;
+      popup.addEventListener('click', function() {
+        // Find the Intel button among Streamlit nav buttons
+        var btns = P.querySelectorAll('button');
+        for (var i=0; i<btns.length; i++) {
+          if (btns[i].textContent.trim().toUpperCase() === 'INTEL') {
+            btns[i].click();
+            break;
+          }
+        }
+        popup.style.display = 'none';
+      });
+    }
+  }
+
+  setTimeout(wirePopup, 200);
+})();
+</script>
+""", height=0)
 
 # ══ PANEL: MARKET ═════════════════════════════════════════════════════════════
 if active == "market":
@@ -1036,6 +985,29 @@ if active == "market":
         </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="section-hdr">Live Market</div>', unsafe_allow_html=True)
+
+    # ── Chart type selector (Python-driven, reliable) ───────────────────────
+    if "chart_type" not in st.session_state:
+        st.session_state["chart_type"] = "line"
+    _chart_cols = st.columns([1,1,1,6])
+    for _ci, (_ct, _cl) in enumerate([("line","📈 Line"),("candle","🕯 Candle"),("bar","📊 Bar")]):
+        with _chart_cols[_ci]:
+            _is_sel = st.session_state["chart_type"] == _ct
+            st.markdown(f"""<style>
+            div[data-testid="stHorizontalBlock"]:has(#chart-sel-{_ct}) button {{
+                background:{'rgba(0,200,150,0.15)' if _is_sel else 'rgba(255,255,255,0.04)'} !important;
+                border:1px solid {'#00C896' if _is_sel else 'rgba(255,255,255,0.1)'} !important;
+                color:{'#00C896' if _is_sel else 'rgba(255,255,255,0.45)'} !important;
+                font-size:11px !important; font-weight:{'700' if _is_sel else '500'} !important;
+                height:32px !important; border-radius:8px !important;
+            }}
+            </style><div id="chart-sel-{_ct}">""", unsafe_allow_html=True)
+            if st.button(_cl, key=f"chartsel_{_ct}", use_container_width=True):
+                st.session_state["chart_type"] = _ct
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+    _chart = st.session_state["chart_type"]
+
     if not can_trade:
         st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin-bottom:16px">Trading is closed. Study the companies below.</p>', unsafe_allow_html=True)
 
@@ -1133,76 +1105,82 @@ if active == "market":
             hist = team.get("price_history",{}).get(cid,[])
             if not hist: hist = [c.get("prev_price",price), price]
             elif len(hist)==1: hist = [hist[0], price]
-            display_price = st.session_state["micro_prices"].get(cid, price) if phase == "trading" else price
-            display_hist = hist[:-1] + [display_price] if hist else [display_price]
-            # Color based on real price vs start of history — micro fluctuations don't change the color
+
+            _chart_type = st.session_state.get("chart_type", "line")
+
+            # For line: add live micro price as last point (smooth animation)
+            # For candle/bar: use stable real history only (no jitter)
+            if _chart_type == "line" and phase == "trading":
+                display_price = st.session_state["micro_prices"].get(cid, price)
+                display_hist = hist[:-1] + [display_price] if hist else [display_price]
+            else:
+                display_hist = hist
+
             chart_color = "#00C896" if price >= display_hist[0] else "#FF4D6A"
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
-            _is_light = st.session_state.get("light_mode", False)
-            _label_col = "rgba(30,60,30,0.7)"  if _is_light else "rgba(255,255,255,0.35)"
-            _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
-            _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
-            _chart_type = st.session_state.get("chart_type", "line")
+
+            _is_light  = st.session_state.get("light_mode", False)
+            _label_col = "rgba(30,60,30,0.7)" if _is_light else "rgba(255,255,255,0.35)"
+            _grid_col  = "rgba(0,80,0,0.08)"  if _is_light else "rgba(255,255,255,0.05)"
+            _tick_col  = "rgba(30,60,30,0.5)" if _is_light else "rgba(255,255,255,0.2)"
+            _y_scale   = alt.Scale(domain=[mn - pad, mx + pad])
+            _y_axis    = alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
+                                  tickColor=_tick_col, domainColor=_tick_col,
+                                  tickCount=4, format=",.0f",
+                                  labelFont="Space Grotesk", labelFontSize=11)
 
             if _chart_type == "candle":
-                # Build simulated OHLC from rolling windows of the history data
+                # Proper OHLC candlesticks
                 _n = len(display_hist)
-                _window = max(1, _n // max(1, min(20, _n)))  # aim for ~20 candles
+                _wsize = max(1, _n // 20)
                 _rows = []
-                for _s in range(0, _n, _window):
-                    _seg = display_hist[_s:_s+_window]
+                for _s in range(0, _n, _wsize):
+                    _seg = display_hist[_s:_s + _wsize]
                     if not _seg: continue
-                    _rows.append({
-                        "i": _s + len(_seg)//2,
-                        "open":  _seg[0],
-                        "close": _seg[-1],
-                        "high":  max(_seg),
-                        "low":   min(_seg),
-                    })
+                    _rows.append({"i": _s + len(_seg) // 2,
+                                  "open": _seg[0], "close": _seg[-1],
+                                  "high": max(_seg), "low": min(_seg)})
                 if len(_rows) < 2:
                     _rows = [{"i":0,"open":display_hist[0],"close":display_hist[0],"high":display_hist[0],"low":display_hist[0]},
                              {"i":1,"open":display_hist[-1],"close":display_hist[-1],"high":display_hist[-1],"low":display_hist[-1]}]
                 _df_c = pd.DataFrame(_rows)
-                _df_c["color"] = _df_c.apply(lambda r: "#00C896" if r["close"] >= r["open"] else "#FF4D6A", axis=1)
-                _df_c["bar_top"]    = _df_c[["open","close"]].max(axis=1)
-                _df_c["bar_bottom"] = _df_c[["open","close"]].min(axis=1)
-                _y_scale = alt.Scale(domain=[mn-pad, mx+pad])
-                _y_axis  = alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
-                                    tickColor=_tick_col, domainColor=_tick_col,
-                                    tickCount=4, format=",.0f", labelFont="Space Grotesk", labelFontSize=11)
+                _df_c["col"] = _df_c.apply(lambda r: "#00C896" if r["close"] >= r["open"] else "#FF4D6A", axis=1)
+                _df_c["btop"] = _df_c[["open","close"]].max(axis=1)
+                _df_c["bbot"] = _df_c[["open","close"]].min(axis=1)
                 _wick = alt.Chart(_df_c).mark_rule(strokeWidth=1.5).encode(
                     x=alt.X("i:Q", axis=None),
-                    y=alt.Y("low:Q", scale=_y_scale, axis=_y_axis),
+                    y=alt.Y("low:Q",  scale=_y_scale, axis=_y_axis),
                     y2=alt.Y2("high:Q"),
-                    color=alt.Color("color:N", scale=None)
+                    color=alt.Color("col:N", scale=None)
                 )
-                _body = alt.Chart(_df_c).mark_bar(width=6).encode(
+                _body = alt.Chart(_df_c).mark_bar(width=max(4, 200 // max(len(_rows), 1))).encode(
                     x=alt.X("i:Q", axis=None),
-                    y=alt.Y("bar_bottom:Q", scale=_y_scale, axis=_y_axis),
-                    y2=alt.Y2("bar_top:Q"),
-                    color=alt.Color("color:N", scale=None)
+                    y=alt.Y("bbot:Q", scale=_y_scale, axis=_y_axis),
+                    y2=alt.Y2("btop:Q"),
+                    color=alt.Color("col:N", scale=None)
                 )
                 chart = (_wick + _body).properties(height=220, background="transparent").configure_view(strokeWidth=0)
-                st.altair_chart(chart, use_container_width=True)
-                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
-                continue
-
-            df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
-            if _chart_type == "bar":
-                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
+            elif _chart_type == "bar":
+                df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
+                chart = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75).encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("Price:Q", scale=_y_scale, axis=_y_axis),
+                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             else:
-                _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-            chart = _mark.encode(
-                x=alt.X("i:Q", axis=None),
-                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col,
-                                      labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col,
-                                      tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)),
-            ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
+                chart = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("Price:Q", scale=_y_scale, axis=_y_axis),
+                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+
             st.altair_chart(chart, use_container_width=True)
+            # Hide Altair toolbar (the two yellow buttons)
+            st.markdown("""<style>
+            .vega-embed .chart-wrapper ~ * { display:none !important; }
+            .vega-embed summary { display:none !important; }
+            .vega-embed details { display:none !important; }
+            </style>""", unsafe_allow_html=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
 elif active == "news":
@@ -1275,20 +1253,31 @@ elif active == "loans":
         cls       = css_map.get(bk["css"], "bk-s")
         chev_rot  = "180deg" if is_open else "0deg"
 
-        # Card onclick: set ?bank_open=bk_id on PARENT window URL → Python reads on next autorefresh
+        # ── Bank header: plain Streamlit button, no JS/URL tricks ──────────────
+        color_map_bk = {"bk-s": "#00C896", "bk-m": "#ffd93d", "bk-r": "#FF4D6A"}
+        bk_color = color_map_bk.get(cls, "#fff")
+        st.markdown(f"""<style>
+        div[data-testid="stHorizontalBlock"] {{}}
+        #bkbtn-{bk_id} button {{
+            background:{'rgba(0,200,150,0.08)' if cls=='bk-s' else 'rgba(255,217,61,0.07)' if cls=='bk-m' else 'rgba(255,77,106,0.07)'} !important;
+            border:1px solid {bk_color}44 !important;
+            color:{bk_color} !important;
+            font-weight:700 !important; font-size:15px !important;
+            height:64px !important; border-radius:14px !important;
+            text-align:left !important; padding:0 20px !important;
+        }}
+        </style>
+        <div id="bkbtn-{bk_id}">""", unsafe_allow_html=True)
+        btn_lbl = f"{'▾' if is_open else '▸'}  {bk['name']}   {bk['rate_label']}   {'Borrowed: '+fmt(bank_bal) if bank_bal>0 else 'Tap to expand'}"
+        if st.button(btn_lbl, key=f"bkhead_{bk_id}", use_container_width=True):
+            st.session_state["bank_open"] = None if is_open else bk_id
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Visual detail card (shown always, below button)
         st.markdown(f"""
-        <div class="bk-wrap {cls}" id="bkwrap-{bk_id}"
-             style="cursor:pointer"
-             onclick="(function(){{
-               var url = new URL(window.parent.location.href);
-               url.searchParams.set('bank_open', '{bk_id}');
-               window.parent.history.replaceState({{}}, '', url.toString());
-             }})()">
-          <div class="bk-head {'open' if is_open else ''}">
-            <div class="bk-head-top">
-              <span class="bk-hname">{bk['name']}</span>
-              <span class="bk-hchev" style="transform:rotate({chev_rot})">▾</span>
-            </div>
+        <div class="bk-wrap {cls}" style="margin-top:-6px;margin-bottom:4px">
+          <div class="bk-head">
             <div class="bk-hrate">{bk['rate_label']}</div>
             <div class="bk-hmeta">Limit: {fmt(bk['cap'])} &nbsp;·&nbsp; Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
             <div class="bk-hnote">{bk['note']}</div>
@@ -1303,18 +1292,18 @@ elif active == "loans":
             elif available <= 0:
                 st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Credit limit reached.</p>', unsafe_allow_html=True)
             else:
-                min_b = bk.get("min_borrow", 5000)
-                max_b = min(bk.get("max_borrow", bk["cap"]), available)
+                min_b = int(bk.get("min_borrow", 5000))
+                max_b = int(min(bk.get("max_borrow", bk["cap"]), available))
                 if min_b > max_b:
-                    st.markdown(f'<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Only ₹{int(available):,} remaining — below minimum borrow of ₹{int(min_b):,}.</p>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">Only {fmt(available)} remaining — below minimum of {fmt(min_b)}.</p>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 10px">Choose amount (₹{int(min_b):,} – ₹{int(max_b):,}):</p>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 10px">How much to borrow? ({fmt(min_b)} – {fmt(max_b)})</p>', unsafe_allow_html=True)
                     borrow_key = f"borrow_amt_{bk_id}"
-                    if borrow_key not in st.session_state:
+                    if borrow_key not in st.session_state or not (min_b <= st.session_state[borrow_key] <= max_b):
                         st.session_state[borrow_key] = min_b
                     borrow_amt = st.number_input(
-                        "Amount", min_value=int(min_b), max_value=int(max_b),
-                        step=1000, value=int(st.session_state.get(borrow_key, min_b)),
+                        "Amount", min_value=min_b, max_value=max_b,
+                        step=1000, value=st.session_state[borrow_key],
                         key=borrow_key, label_visibility="collapsed"
                     )
                     interest_preview = borrow_amt * bk["rate"]
@@ -1327,8 +1316,6 @@ elif active == "loans":
                         team[f"loan_{bk_id}"] = team.get(f"loan_{bk_id}", 0) + borrow_amt
                         state["teams"][tid] = team; save_state(state)
                         st.session_state["bank_open"] = None
-                        try: del st.query_params["bank_open"]
-                        except: pass
                         st.success(f"Borrowed {fmt(borrow_amt)} from {bk['name']}"); st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
