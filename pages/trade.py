@@ -376,10 +376,8 @@ if not team:
                 else:
                     state = load_state()
                     new_tid = str(uuid.uuid4())[:8]
-                    # Fix 4: Always capitalize first letter, lowercase rest
-                    clean_name = team_name.strip().capitalize()
                     state["teams"][new_tid] = {
-                        "name": clean_name,
+                        "name": team_name.strip(),
                         "participant_num": int(participant_num),
                         "cash": 0, "loan_balance": 0,
                         "loan_rbi_safe": 0, "loan_axis_mid": 0, "loan_hawala_risky": 0,
@@ -782,31 +780,63 @@ _stc.html(f"""
     P.body.appendChild(ov);
     P.body.appendChild(pn);
 
-    // Events
-    function openPanel()  {{ pn.classList.add('sp-open'); ov.classList.add('sp-open'); }}
-    function closePanel() {{ pn.classList.remove('sp-open'); ov.classList.remove('sp-open'); }}
-    ov.addEventListener('click', closePanel);
-    P.getElementById('mm-sclose').addEventListener('click', closePanel);
+    // Listeners are handled entirely by rewire() below — runs on every rerun.
+  }}
 
-    // Gear button — poll until the gear div exists in the parent page
-    (function tryGear() {{
-      var g = P.getElementById('mm-gear-btn');
-      if (g) {{ g.onclick = openPanel; }}
-      else   {{ setTimeout(tryGear, 150); }}
-    }})();
+  // ── Always re-wire ALL settings controls on every rerun ─────────────────────
+  // (iframe refreshes every 3s but parent DOM persists — listeners go stale)
+  (function rewire() {{
+    var pn  = P.getElementById('mm-spanel');
+    var ov  = P.getElementById('mm-soverlay');
+    if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
 
-    // Sun/Moon theme buttons
+    // ── Replace overlay to drop stale listeners (never carry sp-open state) ──
+    var ov2 = P.createElement('div');
+    ov2.id = 'mm-soverlay';
+    ov.parentNode.replaceChild(ov2, ov);
+
+    function openPanel()  {{ pn.classList.add('sp-open'); ov2.classList.add('sp-open'); }}
+    function closePanel() {{ pn.classList.remove('sp-open'); ov2.classList.remove('sp-open'); }}
+    ov2.addEventListener('click', closePanel);
+
+    // ── Helper: clone element to strip all old listeners, then re-attach ──────
+    function rewireEl(id, fn) {{
+      var el = P.getElementById(id);
+      if (!el) return null;
+      var el2 = el.cloneNode(true);
+      el.parentNode.replaceChild(el2, el);
+      if (fn) fn(el2);
+      return el2;
+    }}
+
+    // Close button
+    rewireEl('mm-sclose', function(el) {{ el.addEventListener('click', closePanel); }});
+
+    // Gear button
+    var g = P.getElementById('mm-gear-btn');
+    if (g) {{ g.onclick = openPanel; }}
+    else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
+
+    // ── Theme buttons — re-wire + sync active state ───────────────────────────
     function setTheme(light) {{
       isLight = light;
-      P.getElementById('mm-btn-light').className = 'mm-tbtn' + (light ? ' t-active-light' : '');
-      P.getElementById('mm-btn-dark').className  = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
+      var bl2 = P.getElementById('mm-btn-light');
+      var bd2 = P.getElementById('mm-btn-dark');
+      if (bl2) bl2.className = 'mm-tbtn' + (light  ? ' t-active-light' : '');
+      if (bd2) bd2.className = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
       if (light) P.body.classList.add('light-mode');
       else       P.body.classList.remove('light-mode');
     }}
-    P.getElementById('mm-btn-light').addEventListener('click', function() {{ setTheme(true);  }});
-    P.getElementById('mm-btn-dark').addEventListener('click',  function() {{ setTheme(false); }});
+    rewireEl('mm-btn-light', function(el) {{
+      el.className = 'mm-tbtn' + (isLight ? ' t-active-light' : '');
+      el.addEventListener('click', function() {{ setTheme(true); }});
+    }});
+    rewireEl('mm-btn-dark', function(el) {{
+      el.className = 'mm-tbtn' + (!isLight ? ' t-active-dark' : '');
+      el.addEventListener('click', function() {{ setTheme(false); }});
+    }});
 
-    // Chart type buttons — update URL param so Python picks it up on next rerun
+    // ── Chart buttons — re-wire + sync active state ───────────────────────────
     function setChart(type) {{
       chartType = type;
       ['line','candle','bar'].forEach(function(t) {{
@@ -816,74 +846,41 @@ _stc.html(f"""
       var url = new URL(window.parent.location.href);
       url.searchParams.set('chart', type);
       window.parent.history.replaceState({{}}, '', url.toString());
-      // Force immediate rerun by dispatching a storage event Streamlit listens to
-      window.parent.dispatchEvent(new Event('focus'));
     }}
-    P.getElementById('mm-chart-line').addEventListener('click',   function() {{ setChart('line');   }});
-    P.getElementById('mm-chart-candle').addEventListener('click', function() {{ setChart('candle'); }});
-    P.getElementById('mm-chart-bar').addEventListener('click',    function() {{ setChart('bar');    }});
-
-    // Intel popup toggle
-    P.getElementById('mm-intel-tog').addEventListener('change', function() {{
-      intelPopup = this.checked;
-      var url = new URL(window.parent.location.href);
-      url.searchParams.set('intel_popup', intelPopup ? 'on' : 'off');
-      window.parent.history.replaceState({{}}, '', url.toString());
-      // Show/hide the floating popup immediately
-      var popup = P.getElementById('mm-intel-popup');
-      if (popup) popup.style.display = intelPopup ? 'flex' : 'none';
-    }});
-
-    // Volume slider
-    P.getElementById('mm-vol-sl').addEventListener('input', function() {{
-      P.getElementById('mm-vval').textContent = this.value;
-      var audio = P.getElementById('mm-bg-audio');
-      if (audio) audio.volume = parseInt(this.value) / 100;
-    }});
-  }} else {{
-    // Panel already in DOM — just sync volume slider
-    var sl = P.getElementById('mm-vol-sl');
-    if (sl) sl.value = vol;
-  }}
-
-  // ── Always re-wire gear + close on every rerun (iframe refreshes, parent DOM persists) ──
-  (function rewire() {{
-    var pn  = P.getElementById('mm-spanel');
-    var ov  = P.getElementById('mm-soverlay');
-    var cls = P.getElementById('mm-sclose');
-    var g   = P.getElementById('mm-gear-btn');
-    if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
-
-    // Replace overlay node first — drop stale listeners, never carry sp-open state
-    var ov2 = P.createElement('div');
-    ov2.id = 'mm-soverlay';
-    ov.parentNode.replaceChild(ov2, ov);
-
-    function openPanel()  {{ pn.classList.add('sp-open'); ov2.classList.add('sp-open'); }}
-    function closePanel() {{ pn.classList.remove('sp-open'); ov2.classList.remove('sp-open'); }}
-
-    ov2.addEventListener('click', closePanel);
-
-    // Replace close button to drop stale listeners
-    if (cls) {{
-      var cls2 = cls.cloneNode(true);
-      cls.parentNode.replaceChild(cls2, cls);
-      cls2.addEventListener('click', closePanel);
-    }}
-
-    if (g) {{ g.onclick = openPanel; }}
-    else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
-
-    // Sync chart type buttons active state on every rerun
     ['line','candle','bar'].forEach(function(t) {{
-      var el = P.getElementById('mm-chart-' + t);
-      if (el) el.className = 'mm-tbtn' + (t === chartType ? ' t-active-chart' : '');
+      rewireEl('mm-chart-' + t, function(el) {{
+        el.className = 'mm-tbtn' + (t === chartType ? ' t-active-chart' : '');
+        el.addEventListener('click', function() {{ setChart(t); }});
+      }});
     }});
-    // Sync theme buttons
-    var bl = P.getElementById('mm-btn-light');
-    var bd = P.getElementById('mm-btn-dark');
-    if (bl) bl.className = 'mm-tbtn' + (isLight ? ' t-active-light' : '');
-    if (bd) bd.className = 'mm-tbtn' + (!isLight ? ' t-active-dark'  : '');
+
+    // ── Intel popup toggle — re-wire ──────────────────────────────────────────
+    rewireEl('mm-intel-tog', function(el) {{
+      el.checked = intelPopup;
+      el.addEventListener('change', function() {{
+        intelPopup = this.checked;
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('intel_popup', intelPopup ? 'on' : 'off');
+        window.parent.history.replaceState({{}}, '', url.toString());
+        var popup = P.getElementById('mm-intel-popup');
+        if (popup) popup.style.display = intelPopup ? 'flex' : 'none';
+      }});
+    }});
+
+    // ── Volume slider — re-wire + sync value ──────────────────────────────────
+    rewireEl('mm-vol-sl', function(el) {{
+      el.value = vol;
+      el.addEventListener('input', function() {{
+        vol = parseInt(this.value);
+        var vv = P.getElementById('mm-vval');
+        if (vv) vv.textContent = vol;
+        var audio = P.getElementById('mm-bg-audio');
+        if (audio) audio.volume = vol / 100;
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('vol', vol);
+        window.parent.history.replaceState({{}}, '', url.toString());
+      }});
+    }});
   }})();
 
   if (isLight) P.body.classList.add('light-mode');
@@ -900,64 +897,28 @@ phase_map = {
 p_class, p_title, p_sub = phase_map.get(phase, ("phase-lobby","—","—"))
 st.markdown(f'<div class="phase-banner {p_class}"><strong>{p_title}</strong> &nbsp;—&nbsp; {p_sub}</div>', unsafe_allow_html=True)
 
-# JS-driven countdown — silky smooth, independent of 3s Streamlit refresh
-import streamlit.components.v1 as _timer_comp
+# Python-driven countdown — reliable, same approach as host
 if phase == "trading" and state.get("round_end_time"):
-    _end_ts = state["round_end_time"]
-    _timer_comp.html(f"""
-<div style="margin-bottom:10px">
-  <p style="font-size:28px;color:rgba(255,255,255,0.7);margin-bottom:8px;font-family:Space Grotesk,monospace">
-    ⏱ Round closes in <strong id="mm-cd-time" style="color:#fff">...</strong>
-  </p>
-  <div style="background:rgba(255,255,255,0.08);border-radius:99px;height:10px;overflow:hidden">
-    <div id="mm-cd-bar" style="height:100%;border-radius:99px;width:0%;transition:width 0.9s linear,background 0.5s"></div>
-  </div>
-</div>
-<script>
-(function(){{
-  var endTs={_end_ts}, dur={ROUND_DURATION};
-  function tick(){{
-    var now=Date.now()/1000, rem=Math.max(0,endTs-now);
-    var pct=Math.min(100,(1-rem/dur)*100);
-    var lbl=document.getElementById('mm-cd-time');
-    var bar=document.getElementById('mm-cd-bar');
-    if(lbl){{
-      if(rem<=0){{lbl.parentElement.parentElement.innerHTML='<span style="color:#FF4D6A;font-size:20px">⏰ Round time is up — waiting for host to close.</span>';return;}}
-      var m=Math.floor(rem/60),s=Math.floor(rem%60);
-      lbl.textContent=(m>0?m+'m ':'')+String(s).padStart(2,'0')+'s';
-    }}
-    if(bar){{bar.style.width=pct+'%';bar.style.background=pct<50?'#00C896':pct<75?'#ffd93d':'#FF4D6A';}}
-    if(rem>0) setTimeout(tick,1000);
-  }}
-  tick();
-}})();
-</script>""", height=80, scrolling=False)
+    remaining = max(0, state["round_end_time"] - time.time())
+    if remaining > 0:
+        mins, secs = divmod(int(remaining), 60)
+        time_label = f"{mins}m {secs:02d}s" if mins > 0 else f"{secs}s"
+        progress_val = max(0.0, min(1.0, 1.0 - (remaining / ROUND_DURATION)))
+        bar_color = "#00C896" if progress_val < 0.5 else ("#ffd93d" if progress_val < 0.75 else "#FF4D6A")
+        st.markdown(f'<p style="font-size:30px;color:rgba(255,255,255,0.7);margin-bottom:6px">⏱ Round closes in <strong style="color:#fff">{time_label}</strong></p>', unsafe_allow_html=True)
+        st.markdown(f"""<style>div[data-testid="stProgress"]>div>div>div>div{{background:{bar_color}!important}}div[data-testid="stProgress"]>div>div{{background:rgba(255,255,255,0.08)!important}}</style>""", unsafe_allow_html=True)
+        st.progress(progress_val)
+    else:
+        st.markdown('<p style="font-size:20px;color:#FF4D6A;margin-bottom:6px">⏰ Round time is up — waiting for host to close.</p>', unsafe_allow_html=True)
 elif phase == "between" and state.get("break_end_time"):
-    _bk_end = state["break_end_time"]
-    _timer_comp.html(f"""
-<div style="margin-bottom:10px">
-  <p style="font-size:28px;color:rgba(255,255,255,0.7);margin-bottom:8px;font-family:Space Grotesk,monospace">
-    ☕ Break ends in <strong id="mm-bk-time" style="color:#fff">...</strong>
-  </p>
-  <div style="background:rgba(255,255,255,0.08);border-radius:99px;height:10px;overflow:hidden">
-    <div id="mm-bk-bar" style="height:100%;border-radius:99px;width:0%;transition:width 0.9s linear"></div>
-  </div>
-</div>
-<script>
-(function(){{
-  var endTs={_bk_end}, dur=300;
-  function tick(){{
-    var now=Date.now()/1000, rem=Math.max(0,endTs-now);
-    var pct=Math.min(100,(1-rem/dur)*100);
-    var lbl=document.getElementById('mm-bk-time');
-    var bar=document.getElementById('mm-bk-bar');
-    if(lbl){{var m=Math.floor(rem/60),s=Math.floor(rem%60);lbl.textContent=(m>0?m+'m ':'')+String(s).padStart(2,'0')+'s';}}
-    if(bar){{bar.style.width=pct+'%';bar.style.background=pct<50?'#a78bfa':pct<75?'#38bdf8':'#00C896';}}
-    if(rem>0) setTimeout(tick,1000);
-  }}
-  tick();
-}})();
-</script>""", height=80, scrolling=False)
+    remaining = max(0, state["break_end_time"] - time.time())
+    if remaining > 0:
+        mins, secs = divmod(int(remaining), 60)
+        time_label = f"{mins}m {secs:02d}s" if mins > 0 else f"{secs}s"
+        progress_val = max(0.0, min(1.0, 1.0 - (remaining / BREAK_DURATION)))
+        st.markdown(f'<p style="font-size:30px;color:rgba(255,255,255,0.7);margin-bottom:6px">☕ Break ends in <strong style="color:#fff">{time_label}</strong></p>', unsafe_allow_html=True)
+        st.markdown(f"""<style>div[data-testid="stProgress"]>div>div>div>div{{background:#a78bfa!important}}div[data-testid="stProgress"]>div>div{{background:rgba(255,255,255,0.08)!important}}</style>""", unsafe_allow_html=True)
+        st.progress(progress_val)
 
 # Metrics
 port_val = sum(team["holdings"].get(cid,0) * state["companies"][cid]["price"] for cid in state["companies"])
@@ -1168,137 +1129,49 @@ if active == "market":
             else:
                 st.markdown('<div style="background:#0d0f1a;border:1px solid #1e2535;border-top:none;border-radius:0 0 12px 12px;height:4px"></div>', unsafe_allow_html=True)
         with right_col:
+            import pandas as pd, altair as alt
             hist = team.get("price_history",{}).get(cid,[])
             if not hist: hist = [c.get("prev_price",price), price]
             elif len(hist)==1: hist = [hist[0], price]
             display_price = st.session_state["micro_prices"].get(cid, price) if phase == "trading" else price
             display_hist = hist[:-1] + [display_price] if hist else [display_price]
+            # Color based on real price vs start of history — micro fluctuations don't change the color
             chart_color = "#00C896" if price >= display_hist[0] else "#FF4D6A"
-            chart_color_dim = "rgba(0,200,150,0.15)" if price >= display_hist[0] else "rgba(255,77,106,0.15)"
-            _chart_type = st.session_state.get("chart_type", "line")
+            mn = min(display_hist); mx = max(display_hist)
+            pad = max((mx - mn) * 0.6, price * 0.03)
+            df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
             _is_light = st.session_state.get("light_mode", False)
-            label_col = "rgba(30,60,30,0.7)" if _is_light else "rgba(255,255,255,0.4)"
-            grid_col  = "rgba(0,80,0,0.1)"   if _is_light else "rgba(255,255,255,0.06)"
-            bg_col    = "#f8fbf8"             if _is_light else "transparent"
-
-            import json as _json
-            hist_json = _json.dumps(display_hist)
-            import streamlit.components.v1 as _chart_comp
-            _chart_comp.html(f"""
-<canvas id="ch_{cid}" width="600" height="200" style="width:100%;height:200px;display:block"></canvas>
-<script>
-(function(){{
-  var canvas = document.getElementById('ch_{cid}');
-  if (!canvas) return;
-  var ctx = canvas.getContext('2d');
-  var data = {hist_json};
-  var type = '{_chart_type}';
-  var col  = '{chart_color}';
-  var dim  = '{chart_color_dim}';
-  var labelCol = '{label_col}';
-  var gridCol  = '{grid_col}';
-  var bg       = '{bg_col}';
-  var W = canvas.width, H = canvas.height;
-  var PAD_L=44, PAD_R=12, PAD_T=12, PAD_B=28;
-  var plotW = W-PAD_L-PAD_R, plotH = H-PAD_T-PAD_B;
-
-  if (data.length < 2) data = [data[0]||0, data[0]||0];
-
-  var mn = Math.min.apply(null,data), mx = Math.max.apply(null,data);
-  var range = mx-mn || mx*0.02 || 1;
-  mn -= range*0.15; mx += range*0.15;
-
-  function toX(i) {{ return PAD_L + (i/(data.length-1))*plotW; }}
-  function toY(v) {{ return PAD_T + (1-(v-mn)/(mx-mn))*plotH; }}
-
-  // Clear
-  ctx.clearRect(0,0,W,H);
-  if (bg !== 'transparent') {{ ctx.fillStyle=bg; ctx.fillRect(0,0,W,H); }}
-
-  // Grid lines + Y labels
-  ctx.font = '11px Space Grotesk, monospace';
-  ctx.fillStyle = labelCol;
-  ctx.textAlign = 'right';
-  for (var t=0; t<=4; t++) {{
-    var val = mn + (mx-mn)*t/4;
-    var y = toY(val);
-    ctx.strokeStyle = gridCol;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(PAD_L,y); ctx.lineTo(W-PAD_R,y); ctx.stroke();
-    ctx.fillStyle = labelCol;
-    ctx.fillText(Math.round(val).toLocaleString(), PAD_L-4, y+4);
-  }}
-
-  if (type === 'line') {{
-    // Area fill
-    ctx.beginPath();
-    ctx.moveTo(toX(0), H-PAD_B);
-    for (var i=0;i<data.length;i++) ctx.lineTo(toX(i), toY(data[i]));
-    ctx.lineTo(toX(data.length-1), H-PAD_B);
-    ctx.closePath();
-    var grad = ctx.createLinearGradient(0,PAD_T,0,H-PAD_B);
-    grad.addColorStop(0, col.replace(')',' / 0.25)').replace('#','rgba(').replace(')',',0.25)'));
-    // simpler: use dim
-    grad.addColorStop(0, dim.replace('0.15','0.25'));
-    grad.addColorStop(1, dim.replace('0.15','0.01'));
-    ctx.fillStyle = grad;
-    ctx.fill();
-    // Line
-    ctx.beginPath();
-    ctx.moveTo(toX(0),toY(data[0]));
-    for (var i=1;i<data.length;i++) ctx.lineTo(toX(i),toY(data[i]));
-    ctx.strokeStyle = col; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
-    // Last point dot
-    ctx.beginPath();
-    ctx.arc(toX(data.length-1), toY(data[data.length-1]), 4, 0, Math.PI*2);
-    ctx.fillStyle = col; ctx.fill();
-
-  }} else if (type === 'candle') {{
-    // Group data into candles (every ~5 points = 1 candle)
-    var grp = Math.max(1, Math.floor(data.length/12));
-    var candles = [];
-    for (var i=0;i<data.length;i+=grp) {{
-      var sl = data.slice(i,i+grp);
-      candles.push({{
-        o: sl[0], c: sl[sl.length-1],
-        h: Math.max.apply(null,sl), l: Math.min.apply(null,sl),
-        idx: i + grp/2
-      }});
-    }}
-    var cw = Math.max(4, Math.floor(plotW/candles.length*0.6));
-    candles.forEach(function(cd) {{
-      var x = PAD_L + (cd.idx/(data.length-1))*plotW;
-      var isUp = cd.c >= cd.o;
-      var bodyCol = isUp ? '#00C896' : '#FF4D6A';
-      var oy=toY(cd.o), cy=toY(cd.c), hy=toY(cd.h), ly=toY(cd.l);
-      // Wick
-      ctx.strokeStyle=bodyCol; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.moveTo(x,hy); ctx.lineTo(x,ly); ctx.stroke();
-      // Body
-      var bTop=Math.min(oy,cy), bH=Math.max(Math.abs(cy-oy),2);
-      ctx.fillStyle = isUp ? bodyCol : bodyCol.replace('#','rgba(').replace(')',',0.8)');
-      ctx.strokeStyle=bodyCol; ctx.lineWidth=1;
-      ctx.fillRect(x-cw/2, bTop, cw, bH);
-      ctx.strokeRect(x-cw/2, bTop, cw, bH);
-    }});
-
-  }} else if (type === 'bar') {{
-    var bw = Math.max(2, Math.floor(plotW/data.length*0.65));
-    for (var i=0;i<data.length;i++) {{
-      var x=toX(i), y=toY(data[i]), bH=H-PAD_B-y;
-      var alpha = 0.4 + 0.5*(i/data.length);
-      ctx.fillStyle = col;
-      ctx.globalAlpha = alpha;
-      ctx.fillRect(x-bw/2, y, bw, bH);
-    }}
-    ctx.globalAlpha=1;
-    // Outline on last bar
-    var lx=toX(data.length-1), ly2=toY(data[data.length-1]), lh=H-PAD_B-ly2;
-    ctx.strokeStyle=col; ctx.lineWidth=2;
-    ctx.strokeRect(lx-bw/2,ly2,bw,lh);
-  }}
-}})();
-</script>""", height=210, scrolling=False)
+            _label_col = "rgba(30,60,30,0.7)"  if _is_light else "rgba(255,255,255,0.35)"
+            _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
+            _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
+            _chart_type = st.session_state.get("chart_type", "line")
+            if _chart_type == "bar":
+                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
+            elif _chart_type == "candle":
+                # Simulate candle with tick marks — use area+line combo for visual effect
+                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
+                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
+                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
+                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col, tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)))
+                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                st.altair_chart(chart, use_container_width=True)
+                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
+                continue
+            else:
+                _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
+            chart = _mark.encode(
+                x=alt.X("i:Q", axis=None),
+                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col,
+                                      labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col,
+                                      tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)),
+            ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(chart, use_container_width=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
 elif active == "news":
@@ -1398,8 +1271,7 @@ elif active == "loans":
         }}
         </style>""", unsafe_allow_html=True)
 
-        chev = "▾" if is_open else "▸"
-        btn_text = f"{bk['name']}  {chev}  |  {bk['rate_label']}  |  Limit: {fmt(bk['cap'])}  ·  Borrowed: {fmt(bank_bal)} ({used_pct}%)"
+        btn_text = f"{bk['name']}   {'▾' if is_open else '▸'}\n{bk['rate_label']}\nLimit: {fmt(bk['cap'])}  ·  Borrowed: {fmt(bank_bal)} ({used_pct}%)\n{bk['note']}"
         if st.button(btn_text, key=f"bk_{bk_id}", use_container_width=True):
             st.session_state["bank_open"] = None if is_open else bk_id
             st.rerun()
