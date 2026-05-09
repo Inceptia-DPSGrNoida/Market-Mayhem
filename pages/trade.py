@@ -606,12 +606,10 @@ if _qp_intel is not None:
     if _ip != st.session_state["intel_popup"]:
         st.session_state["intel_popup"] = _ip
 if _qp_bank is not None:
-    # Toggle: if same bank clicked again, close it
-    if st.session_state.get("bank_open") == _qp_bank:
+    if _qp_bank == "" or _qp_bank == st.session_state.get("bank_open"):
         st.session_state["bank_open"] = None
     else:
         st.session_state["bank_open"] = _qp_bank
-    # Clear param from URL so next autorefresh doesn't re-toggle
     try:
         del st.query_params["bank_open"]
     except Exception:
@@ -711,10 +709,31 @@ _stc.html(f"""
   }}
 
   // ── Build overlay + panel DOM once ──────────────────────────────────────
-  var isLight = {'true' if _light else 'false'};
-  var vol = {_vol};
-  var chartType = '{_chart}';
-  var intelPopup = {'true' if _intel_popup else 'false'};
+  // ── Persistent settings state — survives iframe refreshes ──────────────────
+  // Store on window.MM so values aren't re-declared to Python defaults every 3s
+  if (!window.MM) window.MM = {{}};
+  var MM = window.MM;
+
+  // Only accept Python values if JS hasn't diverged (i.e. user hasn't changed them)
+  // This prevents the 3s refresh from snapping settings back mid-interaction
+  if (!MM._init) {{
+    MM.isLight    = {'true' if _light else 'false'};
+    MM.vol        = {_vol};
+    MM.chartType  = '{_chart}';
+    MM.intelPopup = {'true' if _intel_popup else 'false'};
+    MM._init = true;
+  }} else {{
+    // Sync only if Python caught up to what JS set (avoids flicker)
+    var pyLight = {'true' if _light else 'false'};
+    var pyChart = '{_chart}';
+    var pyIntel = {'true' if _intel_popup else 'false'};
+    var pyVol   = {_vol};
+    // Only override JS value if Python agrees with it (confirming the param was read)
+    if (pyLight === MM.isLight) MM.isLight = pyLight;
+    if (pyChart === MM.chartType) MM.chartType = pyChart;
+    if (pyIntel === MM.intelPopup) MM.intelPopup = pyIntel;
+    if (!MM._sliderDragging) MM.vol = pyVol;
+  }}
 
   var SVG_SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd93d" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
   var SVG_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
@@ -730,70 +749,54 @@ _stc.html(f"""
         '<span class="mm-sph-title">Settings</span>' +
         '<div class="mm-sph-x" id="mm-sclose">&#x2715;</div>' +
       '</div>' +
-      // ── Appearance ───────────────────────────────────────────────────────
       '<div class="mm-ssec">' +
         '<div class="mm-slbl">Appearance</div>' +
         '<div class="mm-theme-row">' +
-          '<div class="mm-tbtn ' + (!isLight ? '' : 't-active-light') + '" id="mm-btn-light">' +
-            SVG_SUN + '<span>Light</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (isLight ? '' : 't-active-dark') + '" id="mm-btn-dark">' +
-            SVG_MOON + '<span>Dark</span>' +
-          '</div>' +
+          '<div class="mm-tbtn" id="mm-btn-light">' + SVG_SUN + '<span>Light</span></div>' +
+          '<div class="mm-tbtn" id="mm-btn-dark">'  + SVG_MOON + '<span>Dark</span></div>' +
         '</div>' +
       '</div>' +
-      // ── Chart type ───────────────────────────────────────────────────────
       '<div class="mm-ssec">' +
         '<div class="mm-slbl">Chart Style</div>' +
         '<div class="mm-theme-row">' +
-          '<div class="mm-tbtn ' + (chartType==='line' ? 't-active-chart' : '') + '" id="mm-chart-line">' +
-            SVG_LINE + '<span>Line</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (chartType==='candle' ? 't-active-chart' : '') + '" id="mm-chart-candle">' +
-            SVG_CANDLE + '<span>Candle</span>' +
-          '</div>' +
-          '<div class="mm-tbtn ' + (chartType==='bar' ? 't-active-chart' : '') + '" id="mm-chart-bar">' +
-            SVG_BAR + '<span>Bar</span>' +
-          '</div>' +
+          '<div class="mm-tbtn" id="mm-chart-line">'   + SVG_LINE   + '<span>Line</span></div>' +
+          '<div class="mm-tbtn" id="mm-chart-candle">' + SVG_CANDLE + '<span>Candle</span></div>' +
+          '<div class="mm-tbtn" id="mm-chart-bar">'    + SVG_BAR    + '<span>Bar</span></div>' +
         '</div>' +
       '</div>' +
-      // ── Intel popup ──────────────────────────────────────────────────────
       '<div class="mm-ssec">' +
         '<div class="mm-slbl">Notifications</div>' +
         '<div class="mm-tog-row">' +
           '<span class="mm-tog-desc">Red popup when new Intel drops</span>' +
-          '<label class="mm-tog">' +
-            '<input type="checkbox" id="mm-intel-tog"' + (intelPopup ? ' checked' : '') + '>' +
-            '<span class="mm-tog-sl"></span>' +
-          '</label>' +
+          '<label class="mm-tog"><input type="checkbox" id="mm-intel-tog"><span class="mm-tog-sl"></span></label>' +
         '</div>' +
       '</div>' +
-      // ── Music volume ─────────────────────────────────────────────────────
       '<div class="mm-ssec" style="border-bottom:none">' +
         '<div class="mm-slbl">Music Volume</div>' +
         '<div class="mm-svlbl">Background music <span style="color:rgba(255,255,255,0.35);font-size:12px">(lobby &amp; breaks)</span></div>' +
         '<div class="mm-svrow">' +
           '<span style="font-size:15px">&#x1F508;</span>' +
-          '<input type="range" id="mm-vol-sl" min="0" max="100" value="' + vol + '">' +
+          '<input type="range" id="mm-vol-sl" min="0" max="100">' +
           '<span style="font-size:15px">&#x1F50A;</span>' +
-          '<span class="mm-svval" id="mm-vval">' + vol + '</span>' +
+          '<span class="mm-svval" id="mm-vval"></span>' +
         '</div>' +
       '</div>';
     P.body.appendChild(ov);
     P.body.appendChild(pn);
-
-    // Listeners are handled entirely by rewire() below — runs on every rerun.
   }}
 
-  // ── Always re-wire ALL settings controls on every rerun ─────────────────────
-  // (iframe refreshes every 3s but parent DOM persists — listeners go stale)
-  (function rewire() {{
+  // ── Debounced rewire — prevent double-fire on rapid clicks ───────────────────
+  clearTimeout(MM._rewireTimer);
+  MM._rewireTimer = setTimeout(function() {{
     var pn  = P.getElementById('mm-spanel');
     var ov  = P.getElementById('mm-soverlay');
-    if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
+    if (!pn || !ov) return;
 
+    // Replace overlay once to drop stale listeners — but preserve open state
+    var wasOpen = ov.classList.contains('sp-open') || pn.classList.contains('sp-open');
     var ov2 = P.createElement('div');
     ov2.id = 'mm-soverlay';
+    if (wasOpen) {{ ov2.classList.add('sp-open'); pn.classList.add('sp-open'); }}
     ov.parentNode.replaceChild(ov2, ov);
 
     function openPanel()  {{ pn.classList.add('sp-open'); ov2.classList.add('sp-open'); }}
@@ -812,29 +815,36 @@ _stc.html(f"""
     rewireEl('mm-sclose', function(el) {{ el.addEventListener('click', closePanel); }});
 
     var g = P.getElementById('mm-gear-btn');
-    if (g) {{ g.onclick = openPanel; }}
-    else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
+    if (g) g.onclick = openPanel;
+    else setTimeout(function() {{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200);
 
-    function setTheme(light) {{
-      isLight = light;
-      var bl2 = P.getElementById('mm-btn-light');
-      var bd2 = P.getElementById('mm-btn-dark');
-      if (bl2) bl2.className = 'mm-tbtn' + (light  ? ' t-active-light' : '');
-      if (bd2) bd2.className = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
+    // ── Theme ───────────────────────────────────────────────────────────────
+    function applyTheme(light) {{
+      MM.isLight = light;
+      var bl = P.getElementById('mm-btn-light');
+      var bd = P.getElementById('mm-btn-dark');
+      if (bl) bl.className = 'mm-tbtn' + (light  ? ' t-active-light' : '');
+      if (bd) bd.className = 'mm-tbtn' + (!light ? ' t-active-dark'  : '');
       if (light) P.body.classList.add('light-mode');
       else       P.body.classList.remove('light-mode');
+      var url = new URL(window.parent.location.href);
+      url.searchParams.set('theme', light ? 'light' : 'dark');
+      window.parent.history.replaceState({{}}, '', url.toString());
     }}
+    // Apply current state immediately (no flicker)
+    applyTheme(MM.isLight);
     rewireEl('mm-btn-light', function(el) {{
-      el.className = 'mm-tbtn' + (isLight ? ' t-active-light' : '');
-      el.addEventListener('click', function() {{ setTheme(true); }});
+      el.className = 'mm-tbtn' + (MM.isLight ? ' t-active-light' : '');
+      el.addEventListener('click', function() {{ applyTheme(true); }});
     }});
     rewireEl('mm-btn-dark', function(el) {{
-      el.className = 'mm-tbtn' + (!isLight ? ' t-active-dark' : '');
-      el.addEventListener('click', function() {{ setTheme(false); }});
+      el.className = 'mm-tbtn' + (!MM.isLight ? ' t-active-dark' : '');
+      el.addEventListener('click', function() {{ applyTheme(false); }});
     }});
 
-    function setChart(type) {{
-      chartType = type;
+    // ── Chart style ─────────────────────────────────────────────────────────
+    function applyChart(type) {{
+      MM.chartType = type;
       ['line','candle','bar'].forEach(function(t) {{
         var el = P.getElementById('mm-chart-' + t);
         if (el) el.className = 'mm-tbtn' + (t === type ? ' t-active-chart' : '');
@@ -843,41 +853,50 @@ _stc.html(f"""
       url.searchParams.set('chart', type);
       window.parent.history.replaceState({{}}, '', url.toString());
     }}
+    applyChart(MM.chartType);
     ['line','candle','bar'].forEach(function(t) {{
       rewireEl('mm-chart-' + t, function(el) {{
-        el.className = 'mm-tbtn' + (t === chartType ? ' t-active-chart' : '');
-        el.addEventListener('click', function() {{ setChart(t); }});
+        el.className = 'mm-tbtn' + (t === MM.chartType ? ' t-active-chart' : '');
+        el.addEventListener('click', function() {{ applyChart(t); }});
       }});
     }});
 
+    // ── Intel popup ─────────────────────────────────────────────────────────
     rewireEl('mm-intel-tog', function(el) {{
-      el.checked = intelPopup;
+      el.checked = MM.intelPopup;
       el.addEventListener('change', function() {{
-        intelPopup = this.checked;
+        MM.intelPopup = this.checked;
         var url = new URL(window.parent.location.href);
-        url.searchParams.set('intel_popup', intelPopup ? 'on' : 'off');
+        url.searchParams.set('intel_popup', MM.intelPopup ? 'on' : 'off');
         window.parent.history.replaceState({{}}, '', url.toString());
         var popup = P.getElementById('mm-intel-popup');
-        if (popup) popup.style.display = intelPopup ? 'flex' : 'none';
+        if (popup) popup.style.display = MM.intelPopup ? 'flex' : 'none';
       }});
     }});
 
+    // ── Volume — protect mid-drag from rewire reset ──────────────────────
     rewireEl('mm-vol-sl', function(el) {{
-      el.value = vol;
+      el.value = MM.vol;
+      var vv = P.getElementById('mm-vval');
+      if (vv) vv.textContent = MM.vol;
+      el.addEventListener('mousedown', function() {{ MM._sliderDragging = true; }});
+      el.addEventListener('touchstart', function() {{ MM._sliderDragging = true; }});
+      el.addEventListener('mouseup',   function() {{ MM._sliderDragging = false; }});
+      el.addEventListener('touchend',  function() {{ MM._sliderDragging = false; }});
       el.addEventListener('input', function() {{
-        vol = parseInt(this.value);
-        var vv = P.getElementById('mm-vval');
-        if (vv) vv.textContent = vol;
+        MM.vol = parseInt(this.value);
+        var vv2 = P.getElementById('mm-vval');
+        if (vv2) vv2.textContent = MM.vol;
         var audio = P.getElementById('mm-bg-audio');
-        if (audio) audio.volume = vol / 100;
+        if (audio) audio.volume = MM.vol / 100;
         var url = new URL(window.parent.location.href);
-        url.searchParams.set('vol', vol);
+        url.searchParams.set('vol', MM.vol);
         window.parent.history.replaceState({{}}, '', url.toString());
       }});
     }});
-  }})();
+  }}, 80); // 80ms debounce — fast enough, prevents double-fire on rapid clicks
 
-  if (isLight) P.body.classList.add('light-mode');
+  if (MM.isLight) P.body.classList.add('light-mode');
 }})();
 </script>
 </body></html>
@@ -1346,44 +1365,15 @@ elif active == "loans":
         open_cls  = "bkp-open" if is_open else ""
         chev      = "▾" if is_open else "▸"
 
-        # ── Invisible Streamlit button absolutely overlaid on the HTML card ────
-        # The CSS makes the button transparent + fills the card area exactly.
-        # Clicking anywhere on the card hits the button. No visible toggle.
+        # Pure HTML panel — clicking sets ?bank_open=id in URL, Python reads it on next rerun
+        # No st.button anywhere near here = zero ghost boxes
+        current_url_params = "&".join(f"{k}={v}" for k, v in st.query_params.to_dict().items() if k != "bank_open")
+        toggle_val = "" if is_open else bk_id  # empty = close, bk_id = open
         st.markdown(f"""
-        <style>
-        /* scoped to this bank's button key */
-        button[data-testid="baseButton-secondary"][data-key="bk_{bk_id}"] {{
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            height: 115px !important;
-            margin-top: -115px !important;
-            opacity: 0 !important;
-            cursor: pointer !important;
-            z-index: 10 !important;
-            border: none !important;
-            background: transparent !important;
-            padding: 0 !important;
-        }}
-        /* Collapse all Streamlit wrapper divs around the invisible button */
-        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]),
-        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) > div,
-        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) > div > div {{
-            position: relative !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 0 !important;
-            font-size: 0 !important;
-        }}
-        /* Specifically kill the element-container gap Streamlit adds after buttons */
-        div[data-testid="element-container"]:has(button[data-key="bk_{bk_id}"]) {{
-            margin: 0 !important;
-            padding: 0 !important;
-            height: 0 !important;
-            overflow: visible !important;
-        }}
-        </style>
-        <div class="bkp-wrap {theme}" style="position:relative">
+        <a href="?bank_open={toggle_val}{('&'+current_url_params) if current_url_params else ''}"
+           style="text-decoration:none;display:block;margin-bottom:0"
+           data-bank="{bk_id}">
+        <div class="bkp-wrap {theme}">
           <div class="bkp-head {open_cls}">
             <div class="bkp-stripe"></div>
             <div class="bkp-content">
@@ -1401,10 +1391,8 @@ elif active == "loans":
             </div>
             <div class="bkp-chev">{chev}</div>
           </div>
-        </div>""", unsafe_allow_html=True)
-        if st.button("", key=f"bk_{bk_id}", use_container_width=True):
-            st.session_state["bank_open"] = None if is_open else bk_id
-            st.rerun()
+        </div>
+        </a>""", unsafe_allow_html=True)
 
         # ── Accordion body ─────────────────────────────────────────────────────
         if is_open:
