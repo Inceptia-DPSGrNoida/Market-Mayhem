@@ -2,6 +2,8 @@ import streamlit as st
 import json, time, uuid
 from pathlib import Path
 import sys, importlib.util
+import pandas as pd
+import altair as alt
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import load_state, save_state, STARTING_CASH, ROUND_DURATION
 from streamlit_autorefresh import st_autorefresh
@@ -535,22 +537,22 @@ if phase == "trading":
             change = direction * _random.uniform(vol * 0.3, vol)
             st.session_state["micro_prices"][cid] = max(10, round(mp * (1 + change), 1))
 
-# Build display_hist: real price history + live micro price as last point
+# Build display_hist: real price history lives in game_state; micro ticks in session only
 if "price_history" not in team:
     team["price_history"] = {cid: [c["price"]] for cid, c in state["companies"].items()}
+
+# Accumulate micro ticks in session state only — never written to disk
+if "micro_hist" not in st.session_state or st.session_state.get("micro_hist_phase") != phase:
+    st.session_state["micro_hist"] = {cid: [] for cid in state["companies"]}
+    st.session_state["micro_hist_phase"] = phase
+
 if phase == "trading":
-    changed = False
-    for cid, c in state["companies"].items():
-        hist = team["price_history"].get(cid, [])
-        # Append micro price every tick for a smooth live chart
-        micro_p = st.session_state["micro_prices"].get(cid, c["price"])
-        hist.append(micro_p)
-        if len(hist) > 60: hist = hist[-60:]  # keep last 60 points
-        team["price_history"][cid] = hist
-        changed = True
-    if changed:
-        state["teams"][tid] = team
-        save_state(state)
+    for cid in state["companies"]:
+        micro_p = st.session_state["micro_prices"].get(cid, state["companies"][cid]["price"])
+        buf = st.session_state["micro_hist"].get(cid, [])
+        buf.append(micro_p)
+        if len(buf) > 60: buf = buf[-60:]
+        st.session_state["micro_hist"][cid] = buf
 
 # FIX 4: Game over screen — show immediately after ticker, no banner, no progress
 if phase == "ended":
@@ -1063,7 +1065,7 @@ if active == "market":
                 </div>
                 <div style="text-align:right">
                   <div class="price-main">{fmt(price)}</div>
-                  <div class="price-chg {chg_class}">{arrow} {abs(chg):.0f} ({chg_pct:+.1f}%)</div>
+                  <div class="price-chg {chg_class}">{arrow} {abs(chg):.0f} ({abs(chg_pct):.1f}%)</div>
                   <div style="font-size:11px;color:rgba(255,255,255,0.25);margin-top:4px">{held} held</div>
                 </div>
               </div>
@@ -1118,25 +1120,31 @@ if active == "market":
                         st.markdown('<div class="sell-btn">', unsafe_allow_html=True)
                         if st.button("Sell", key=f"sell_{cid}", use_container_width=True, disabled=(held==0)):
                             state = load_state(); team = state["teams"][tid]
+                            fresh_price = state["companies"][cid]["price"]
                             hn = team["holdings"].get(cid,0); sq = min(sell_qty,hn)
-                            team["holdings"][cid] = hn-sq; team["cash"] += sq*price
+                            team["holdings"][cid] = hn-sq; team["cash"] += sq*fresh_price
                             if team["holdings"][cid]==0: team["avg_cost"][cid]=0
                             state["teams"][tid] = team; save_state(state)
-                            st.success(f"Sold {sq} × {c['name']} @ {fmt(price)}"); st.rerun()
+                            st.success(f"Sold {sq} × {c['name']} @ {fmt(fresh_price)}"); st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
                     st.markdown(f'<div style="font-size:11px;color:rgba(255,255,255,0.25);margin-top:4px">{"Value: "+fmt(sell_qty*price) if held>0 else "None held"}</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div style="background:#0d0f1a;border:1px solid #1e2535;border-top:none;border-radius:0 0 12px 12px;height:4px"></div>', unsafe_allow_html=True)
         with right_col:
-            import pandas as pd, altair as alt
-            hist = team.get("price_history",{}).get(cid,[])
-            if not hist: hist = [c.get("prev_price",price), price]
-            elif len(hist)==1: hist = [hist[0], price]
-            display_price = st.session_state["micro_prices"].get(cid, price) if phase == "trading" else price
-            display_hist = hist[:-1] + [display_price] if hist else [display_price]
-            # Color based on real price vs start of history — micro fluctuations don't change the color
-            chart_color = "#00C896" if price >= display_hist[0] else "#FF4D6A"
+            # Build display history: persistent real ticks + live micro ticks this session
+            real_hist = team.get("price_history", {}).get(cid, [])
+            micro_buf = st.session_state.get("micro_hist", {}).get(cid, [])
+            if phase == "trading":
+                display_hist = (real_hist + micro_buf) if real_hist else micro_buf or [price]
+            else:
+                display_hist = real_hist if real_hist else [c.get("prev_price", price), price]
+            if len(display_hist) == 1:
+                display_hist = [display_hist[0], display_hist[0]]
+
+            # Color: compare current real price vs prev_price (round-start baseline)
+            chart_color = "#00C896" if price >= c.get("prev_price", price) else "#FF4D6A"
+
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
             df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
@@ -1145,32 +1153,32 @@ if active == "market":
             _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
             _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
             _chart_type = st.session_state.get("chart_type", "line")
+            _y_axis = alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
+                               tickColor=_tick_col, domainColor=_tick_col,
+                               tickCount=4, format=",.0f",
+                               labelFont="Space Grotesk", labelFontSize=11)
             if _chart_type == "bar":
                 _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
+                chart = _mark.encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis),
+                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             elif _chart_type == "candle":
-                # Simulate candle with tick marks — use area+line combo for visual effect
-                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
-                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
-                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col, tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)))
-                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
-                st.altair_chart(chart, use_container_width=True)
-                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
-                continue
+                # Area + line + tick combo to simulate candle style
+                _enc = dict(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis)
+                )
+                _area = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone").encode(**_enc)
+                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(**_enc)
+                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10).encode(**_enc)
+                chart = (_area + _line + _tick).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             else:
                 _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-            chart = _mark.encode(
-                x=alt.X("i:Q", axis=None),
-                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col,
-                                      labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col,
-                                      tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)),
-            ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                chart = _mark.encode(
+                    x=alt.X("i:Q", axis=None),
+                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis),
+                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
