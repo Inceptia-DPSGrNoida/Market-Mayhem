@@ -504,18 +504,23 @@ _stc_music.html(f"""<script>
 </script>""", height=0)
 
 # ── Live micro-fluctuation engine ────────────────────────────────────────────
+# Real prices only change at round start (host). This adds visual micro-ticks
+# every ~3s during trading so charts show live movement. Stored in session state
+# only — never written to game_state.json, so it doesn't affect real prices.
 import random as _random
 
-MICRO_VOL = { 
+MICRO_VOL = {  # per-tick max % move (purely visual) — kept conservative
     "zora":0.003, "streamvx":0.010, "freshco":0.002, "voltex":0.008,
     "mediq":0.009, "skylink":0.012, "swifthaul":0.005, "crownmart":0.009, "shieldgen":0.003,
 }
 
 if "micro_prices" not in st.session_state or st.session_state.get("micro_phase") != phase:
+    # Initialise from real prices
     st.session_state["micro_prices"] = {cid: c["price"] for cid, c in state["companies"].items()}
     st.session_state["micro_phase"] = phase
     st.session_state["micro_tick"] = 0
 
+# Sync if real price drifts far from micro price (e.g. after round start)
 for cid, c in state["companies"].items():
     mp = st.session_state["micro_prices"].get(cid, c["price"])
     if abs(mp - c["price"]) / c["price"] > 0.08:  # >8% drift → resync
@@ -532,9 +537,11 @@ if phase == "trading":
             change = direction * _random.uniform(vol * 0.3, vol)
             st.session_state["micro_prices"][cid] = max(10, round(mp * (1 + change), 1))
 
+# Build display_hist: real price history lives in game_state; micro ticks in session only
 if "price_history" not in team:
     team["price_history"] = {cid: [c["price"]] for cid, c in state["companies"].items()}
 
+# Accumulate micro ticks in session state only — never written to disk
 if "micro_hist" not in st.session_state or st.session_state.get("micro_hist_phase") != phase:
     st.session_state["micro_hist"] = {cid: [] for cid in state["companies"]}
     st.session_state["micro_hist_phase"] = phase
@@ -547,6 +554,7 @@ if phase == "trading":
         if len(buf) > 60: buf = buf[-60:]
         st.session_state["micro_hist"][cid] = buf
 
+# FIX 4: Game over screen — show immediately after ticker, no banner, no progress
 if phase == "ended":
     port_val = sum(team["holdings"].get(cid,0) * state["companies"][cid]["price"] for cid in state["companies"])
     loan_balance = team.get("loan_balance", 0)
@@ -557,11 +565,12 @@ if phase == "ended":
       <p>Results will be announced shortly by your event coordinator.</p>
       <p style="margin-top:24px;font-size:14px;color:rgba(255,255,255,0.2)">Your final net worth: <strong style="color:#00C896">{fmt(net_worth)}</strong></p>
     </div>""", unsafe_allow_html=True)
-    st.stop() 
+    st.stop()  # Don't render anything else after game over
 
 # ── Header + Settings (non-ended phases only) ────────────────────────────────
 participant_tag = f' &nbsp;<span style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.35)">· P{team.get("participant_num","")}</span>' if team.get("participant_num") else ""
 
+# Settings state — read from query params so JS can write them without a rerun
 _qp = st.query_params
 if "music_volume" not in st.session_state:
     st.session_state["music_volume"] = int(_qp.get("vol", 50))
@@ -572,6 +581,7 @@ if "chart_type" not in st.session_state:
 if "intel_popup" not in st.session_state:
     st.session_state["intel_popup"] = _qp.get("intel_popup", "off") == "on"
 
+# Handle query param updates from the JS settings panel
 _qp_vol   = _qp.get("vol")
 _qp_theme = _qp.get("theme")
 _qp_chart = _qp.get("chart")
@@ -612,6 +622,7 @@ _light = st.session_state["light_mode"]
 _chart = st.session_state.get("chart_type", "line")
 _intel_popup = st.session_state.get("intel_popup", False)
 
+# Header (plain HTML — renders fine, no scripts needed here)
 st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
   <div>
@@ -1345,20 +1356,31 @@ elif active == "loans":
             position: absolute !important;
             inset: 0 !important;
             width: 100% !important;
-            height: 100% !important;
+            height: 115px !important;
+            margin-top: -115px !important;
             opacity: 0 !important;
             cursor: pointer !important;
             z-index: 10 !important;
             border: none !important;
             background: transparent !important;
             padding: 0 !important;
-            margin: 0 !important;
         }}
-        /* The st.columns / stVerticalBlock wrapper that holds this button */
-        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) {{
+        /* Collapse all Streamlit wrapper divs around the invisible button */
+        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]),
+        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) > div,
+        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) > div > div {{
             position: relative !important;
-            margin-bottom: 0 !important;
+            margin: 0 !important;
             padding: 0 !important;
+            line-height: 0 !important;
+            font-size: 0 !important;
+        }}
+        /* Specifically kill the element-container gap Streamlit adds after buttons */
+        div[data-testid="element-container"]:has(button[data-key="bk_{bk_id}"]) {{
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 0 !important;
+            overflow: visible !important;
         }}
         </style>
         <div class="bkp-wrap {theme}" style="position:relative">
@@ -1415,6 +1437,7 @@ elif active == "loans":
                     st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">No valid amounts available.</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── Repay section (break only) ─────────────────────────────────────────────
     if phase == "between" and loan_balance > 0:
         st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:24px 0 10px">Repay now to reduce interest before the next round:</p>', unsafe_allow_html=True)
         repay_options = []
@@ -1450,3 +1473,5 @@ elif active == "portfolio":
             cp = c["price"]; avg = team["avg_cost"].get(cid,0); cv = qty*cp; pl = cv-qty*avg
             plc = "delta-up" if pl>=0 else "delta-down"; pls = "+" if pl>=0 else ""
             st.markdown(f'<div class="port-card"><div><div class="port-name">{c["name"]}</div><div class="port-qty">{qty} shares · {c["sector"]}</div></div><div class="port-stats"><div class="port-stat"><div class="s-label">Avg cost</div><div class="s-val">{fmt(avg)}</div></div><div class="port-stat"><div class="s-label">Current</div><div class="s-val">{fmt(cp)}</div></div><div class="port-stat"><div class="s-label">Value</div><div class="s-val">{fmt(cv)}</div></div><div class="port-stat"><div class="s-label">P / L</div><div class="s-val {plc}">{pls}{fmt(pl)}</div></div></div></div>', unsafe_allow_html=True)
+
+# Auto-refresh handled by st_autorefresh(interval=1000) at top of file
