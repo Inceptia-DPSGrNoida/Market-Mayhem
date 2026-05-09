@@ -91,7 +91,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .sell-btn button { background:rgba(255,77,106,0.1) !important; border:1px solid rgba(255,77,106,0.35) !important; color:#FF4D6A !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
 .sell-btn button:hover { background:rgba(255,77,106,0.2) !important; }
 .sell-btn button:disabled { opacity:0.3 !important; }
-.max-btn  button { background:rgba(255,200,0,0.07) !important; border:1px solid rgba(255,200,0,0.25) !important; color:#ffd93d !important; font-size:11px !important; font-weight:700 !important; height:42px !important; }
+.max-btn  button { background:rgba(255,255,255,0.04) !important; border:1px solid rgba(255,255,255,0.1) !important; color:rgba(255,255,255,0.35) !important; font-size:11px !important; font-weight:600 !important; height:42px !important; }
 
 .port-card { background:#0d0f1a; border:1px solid #1e2535; border-radius:12px; padding:18px 22px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
 .port-name { font-size:15px; font-weight:600; color:#fff; }
@@ -589,22 +589,15 @@ _qp_intel = _qp.get("intel_popup")
 _qp_bank  = _qp.get("bank_open")
 if _qp_vol is not None:
     try:
-        _v = int(_qp_vol)
-        if _v != st.session_state["music_volume"]:
-            st.session_state["music_volume"] = _v
+        st.session_state["music_volume"] = int(_qp_vol)
     except ValueError:
         pass
 if _qp_theme is not None:
-    _lm = (_qp_theme == "light")
-    if _lm != st.session_state["light_mode"]:
-        st.session_state["light_mode"] = _lm
+    st.session_state["light_mode"] = (_qp_theme == "light")
 if _qp_chart is not None and _qp_chart in ("line", "candle", "bar"):
-    if _qp_chart != st.session_state["chart_type"]:
-        st.session_state["chart_type"] = _qp_chart
+    st.session_state["chart_type"] = _qp_chart
 if _qp_intel is not None:
-    _ip = (_qp_intel == "on")
-    if _ip != st.session_state["intel_popup"]:
-        st.session_state["intel_popup"] = _ip
+    st.session_state["intel_popup"] = (_qp_intel == "on")
 if _qp_bank is not None:
     if _qp_bank == "" or _qp_bank == st.session_state.get("bank_open"):
         st.session_state["bank_open"] = None
@@ -1143,7 +1136,6 @@ if active == "market":
             else:
                 st.markdown('<div style="background:#0d0f1a;border:1px solid #1e2535;border-top:none;border-radius:0 0 12px 12px;height:4px"></div>', unsafe_allow_html=True)
         with right_col:
-            # Build display history: persistent real ticks + live micro ticks this session
             real_hist = team.get("price_history", {}).get(cid, [])
             micro_buf = st.session_state.get("micro_hist", {}).get(cid, [])
             if phase == "trading":
@@ -1152,7 +1144,6 @@ if active == "market":
                 display_hist = real_hist if real_hist else [c.get("prev_price", price), price]
             if len(display_hist) == 1:
                 display_hist = [display_hist[0], display_hist[0]]
-            # Color: up vs prev_price (round-start baseline), not micro-history start
             chart_color = "#00C896" if price >= c.get("prev_price", price) else "#FF4D6A"
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
@@ -1162,33 +1153,22 @@ if active == "market":
             _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
             _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
             _chart_type = st.session_state.get("chart_type", "line")
+            _y = alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                       axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
+                                     tickColor=_tick_col, domainColor=_tick_col,
+                                     tickCount=4, format=",.0f",
+                                     labelFont="Space Grotesk", labelFontSize=11))
+            _x = alt.X("i:Q", axis=None)
             if _chart_type == "bar":
-                _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
+                chart = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75).encode(x=_x, y=_y)
             elif _chart_type == "candle":
-                # Simulate candle with tick marks — use area+line combo for visual effect
-                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
-                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
-                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col, tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)))
-                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
-                st.altair_chart(chart, use_container_width=True)
-                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
-                continue
+                _area = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone").encode(x=_x, y=_y)
+                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(x=_x, y=_y)
+                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10).encode(x=_x, y=_y)
+                chart = _area + _line + _tick
             else:
-                _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-            chart = _mark.encode(
-                x=alt.X("i:Q", axis=None),
-                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
-                        axis=alt.Axis(grid=True, gridColor=_grid_col,
-                                      labelColor=_label_col, tickColor=_tick_col,
-                                      domainColor=_tick_col,
-                                      tickCount=4, format=",.0f",
-                                      labelFont="Space Grotesk", labelFontSize=11)),
-            ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(chart, use_container_width=True)
+                chart = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(x=_x, y=_y)
+            st.altair_chart(chart.properties(height=220, background="transparent").configure_view(strokeWidth=0), use_container_width=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
 elif active == "news":
