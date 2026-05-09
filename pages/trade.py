@@ -1,9 +1,9 @@
 import streamlit as st
 import json, time, uuid
-from pathlib import Path
-import sys, importlib.util
 import pandas as pd
 import altair as alt
+from pathlib import Path
+import sys, importlib.util
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils import load_state, save_state, STARTING_CASH, ROUND_DURATION
 from streamlit_autorefresh import st_autorefresh
@@ -792,7 +792,6 @@ _stc.html(f"""
     var ov  = P.getElementById('mm-soverlay');
     if (!pn || !ov) {{ setTimeout(rewire, 100); return; }}
 
-    // ── Replace overlay to drop stale listeners (never carry sp-open state) ──
     var ov2 = P.createElement('div');
     ov2.id = 'mm-soverlay';
     ov.parentNode.replaceChild(ov2, ov);
@@ -801,7 +800,6 @@ _stc.html(f"""
     function closePanel() {{ pn.classList.remove('sp-open'); ov2.classList.remove('sp-open'); }}
     ov2.addEventListener('click', closePanel);
 
-    // ── Helper: clone element to strip all old listeners, then re-attach ──────
     function rewireEl(id, fn) {{
       var el = P.getElementById(id);
       if (!el) return null;
@@ -811,15 +809,12 @@ _stc.html(f"""
       return el2;
     }}
 
-    // Close button
     rewireEl('mm-sclose', function(el) {{ el.addEventListener('click', closePanel); }});
 
-    // Gear button
     var g = P.getElementById('mm-gear-btn');
     if (g) {{ g.onclick = openPanel; }}
     else   {{ setTimeout(function(){{ var g2=P.getElementById('mm-gear-btn'); if(g2) g2.onclick=openPanel; }}, 200); }}
 
-    // ── Theme buttons — re-wire + sync active state ───────────────────────────
     function setTheme(light) {{
       isLight = light;
       var bl2 = P.getElementById('mm-btn-light');
@@ -838,7 +833,6 @@ _stc.html(f"""
       el.addEventListener('click', function() {{ setTheme(false); }});
     }});
 
-    // ── Chart buttons — re-wire + sync active state ───────────────────────────
     function setChart(type) {{
       chartType = type;
       ['line','candle','bar'].forEach(function(t) {{
@@ -856,7 +850,6 @@ _stc.html(f"""
       }});
     }});
 
-    // ── Intel popup toggle — re-wire ──────────────────────────────────────────
     rewireEl('mm-intel-tog', function(el) {{
       el.checked = intelPopup;
       el.addEventListener('change', function() {{
@@ -869,7 +862,6 @@ _stc.html(f"""
       }});
     }});
 
-    // ── Volume slider — re-wire + sync value ──────────────────────────────────
     rewireEl('mm-vol-sl', function(el) {{
       el.value = vol;
       el.addEventListener('input', function() {{
@@ -1141,10 +1133,8 @@ if active == "market":
                 display_hist = real_hist if real_hist else [c.get("prev_price", price), price]
             if len(display_hist) == 1:
                 display_hist = [display_hist[0], display_hist[0]]
-
-            # Color: compare current real price vs prev_price (round-start baseline)
+            # Color: up vs prev_price (round-start baseline), not micro-history start
             chart_color = "#00C896" if price >= c.get("prev_price", price) else "#FF4D6A"
-
             mn = min(display_hist); mx = max(display_hist)
             pad = max((mx - mn) * 0.6, price * 0.03)
             df = pd.DataFrame({"i": range(len(display_hist)), "Price": display_hist})
@@ -1153,32 +1143,32 @@ if active == "market":
             _grid_col  = "rgba(0,80,0,0.08)"   if _is_light else "rgba(255,255,255,0.05)"
             _tick_col  = "rgba(30,60,30,0.5)"  if _is_light else "rgba(255,255,255,0.2)"
             _chart_type = st.session_state.get("chart_type", "line")
-            _y_axis = alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col,
-                               tickColor=_tick_col, domainColor=_tick_col,
-                               tickCount=4, format=",.0f",
-                               labelFont="Space Grotesk", labelFontSize=11)
             if _chart_type == "bar":
                 _mark = alt.Chart(df).mark_bar(color=chart_color, opacity=0.75)
-                chart = _mark.encode(
-                    x=alt.X("i:Q", axis=None),
-                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis),
-                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             elif _chart_type == "candle":
-                # Area + line + tick combo to simulate candle style
-                _enc = dict(
-                    x=alt.X("i:Q", axis=None),
-                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis)
-                )
-                _area = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone").encode(**_enc)
-                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(**_enc)
-                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10).encode(**_enc)
-                chart = (_area + _line + _tick).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                # Simulate candle with tick marks — use area+line combo for visual effect
+                _mark = alt.Chart(df).mark_area(color=chart_color, opacity=0.15, interpolate="monotone")
+                _line = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
+                _tick = alt.Chart(df).mark_tick(color=chart_color, thickness=2, size=10)
+                _enc = dict(x=alt.X("i:Q", axis=None), y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col, labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col, tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)))
+                chart = (_mark.encode(**_enc) + _line.encode(**_enc) + _tick.encode(**_enc)).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+                st.altair_chart(chart, use_container_width=True)
+                st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
+                continue
             else:
                 _mark = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone")
-                chart = _mark.encode(
-                    x=alt.X("i:Q", axis=None),
-                    y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]), axis=_y_axis),
-                ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
+            chart = _mark.encode(
+                x=alt.X("i:Q", axis=None),
+                y=alt.Y("Price:Q", scale=alt.Scale(domain=[mn-pad, mx+pad]),
+                        axis=alt.Axis(grid=True, gridColor=_grid_col,
+                                      labelColor=_label_col, tickColor=_tick_col,
+                                      domainColor=_tick_col,
+                                      tickCount=4, format=",.0f",
+                                      labelFont="Space Grotesk", labelFontSize=11)),
+            ).properties(height=220, background="transparent").configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
@@ -1202,52 +1192,149 @@ elif active == "loans":
     if "bank_open" not in st.session_state:
         st.session_state["bank_open"] = None
 
-    if loan_balance > 0:
-        st.markdown(f'<div class="loan-card"><div class="loan-title">Total Outstanding Loan</div><span style="font-size:28px;font-weight:700;font-family:Space Grotesk,monospace;color:#a78bfa">{fmt(loan_balance)}</span><div style="font-size:11px;color:rgba(255,255,255,0.2);margin-top:10px">Interest charged per bank at round-end.</div></div>', unsafe_allow_html=True)
-
+    # ── Bank panel styles ──────────────────────────────────────────────────────
     st.markdown("""<style>
-    .bk-wrap { margin-bottom:12px; }
-    .bk-head { padding:22px 24px; cursor:pointer; transition:filter 0.15s; border-radius:14px; }
-    .bk-head.open { border-radius:14px 14px 0 0; }
-    .bk-head:hover { filter:brightness(1.12); }
-    .bk-head-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-    .bk-hname  { font-size:16px; font-weight:700; font-family:'Space Grotesk',sans-serif; color:#fff; }
-    .bk-hchev  { font-size:18px; color:rgba(255,255,255,0.4); transition:transform 0.25s; }
-    .bk-hrate  { font-size:28px; font-weight:800; font-family:'Space Grotesk',monospace; margin-bottom:8px; }
-    .bk-hmeta  { font-size:12px; color:rgba(255,255,255,0.45); margin-bottom:4px; }
-    .bk-hnote  { font-size:11px; color:rgba(255,255,255,0.25); font-style:italic; }
-    .bk-body   { padding:18px 24px; border-top:none; border-radius:0 0 14px 14px; }
-    .bk-s .bk-head { background:#0a1a14; border:1px solid rgba(0,200,150,0.3); }
-    .bk-m .bk-head { background:#18160a; border:1px solid rgba(255,217,61,0.3); }
-    .bk-r .bk-head { background:#1a0a0e; border:1px solid rgba(255,77,106,0.3); }
-    .bk-s .bk-body { background:#071210; border:1px solid rgba(0,200,150,0.2); }
-    .bk-m .bk-body { background:#121005; border:1px solid rgba(255,217,61,0.2); }
-    .bk-r .bk-body { background:#120508; border:1px solid rgba(255,77,106,0.2); }
-    .bk-s .bk-hrate { color:#00C896; }
-    .bk-m .bk-hrate { color:#ffd93d; }
-    .bk-r .bk-hrate { color:#FF4D6A; }
-    /* light mode */
-    body.light-mode .bk-s .bk-head { background:#f0fff8; border-color:rgba(0,150,90,0.4); }
-    body.light-mode .bk-m .bk-head { background:#fffde8; border-color:rgba(160,120,0,0.4); }
-    body.light-mode .bk-r .bk-head { background:#fff0f3; border-color:rgba(180,0,30,0.4); }
-    body.light-mode .bk-s .bk-body { background:#e8faf2; border-color:rgba(0,150,90,0.25); }
-    body.light-mode .bk-m .bk-body { background:#fdfae0; border-color:rgba(160,120,0,0.25); }
-    body.light-mode .bk-r .bk-body { background:#fde8ed; border-color:rgba(180,0,30,0.25); }
-    body.light-mode .bk-hname { color:#0d2e0d; }
-    body.light-mode .bk-hmeta { color:#4a6a4a; }
-    body.light-mode .bk-hnote { color:#7a947a; }
-    body.light-mode .bk-hchev { color:rgba(0,60,0,0.35); }
-    body.light-mode .bk-s .bk-hrate { color:#006b3c; }
-    body.light-mode .bk-m .bk-hrate { color:#7a5c00; }
-    body.light-mode .bk-r .bk-hrate { color:#a0001e; }
+    /* ── Outer wrapper ── */
+    .bkp-wrap { margin-bottom:16px; border-radius:18px; overflow:hidden; }
+
+    /* ── Header panel ── */
+    .bkp-head {
+        display:flex; align-items:stretch; min-height:110px;
+        cursor:pointer; transition:filter 0.18s;
+        border-radius:18px; border:1px solid;
+        overflow:hidden; position:relative;
+    }
+    .bkp-head:hover { filter:brightness(1.1); }
+    .bkp-head.bkp-open { border-radius:18px 18px 0 0; }
+
+    /* colour accent stripe on left */
+    .bkp-stripe { width:6px; flex-shrink:0; }
+
+    /* main content area */
+    .bkp-content { flex:1; padding:18px 20px; display:flex; flex-direction:column; justify-content:center; gap:6px; }
+
+    /* rate column on the right */
+    .bkp-rate-col {
+        width:130px; flex-shrink:0;
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        gap:4px; padding:18px 16px;
+        border-left:1px solid rgba(255,255,255,0.06);
+    }
+    .bkp-rate-num { font-size:32px; font-weight:900; font-family:'Space Grotesk',monospace; line-height:1; }
+    .bkp-rate-lbl { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; opacity:0.5; }
+
+    /* chevron */
+    .bkp-chev { position:absolute; top:14px; right:16px; font-size:16px; color:rgba(255,255,255,0.3); transition:transform 0.25s; }
+    .bkp-open .bkp-chev { transform:rotate(180deg); color:rgba(255,255,255,0.6); }
+
+    /* text inside header */
+    .bkp-name  { font-size:17px; font-weight:800; font-family:'Space Grotesk',sans-serif; color:#fff; }
+    .bkp-meta  { font-size:12px; color:rgba(255,255,255,0.4); }
+    .bkp-note  { font-size:11px; color:rgba(255,255,255,0.22); font-style:italic; margin-top:2px; }
+    .bkp-bar-wrap { display:flex; align-items:center; gap:8px; margin-top:4px; }
+    .bkp-bar-bg   { flex:1; height:5px; border-radius:99px; background:rgba(255,255,255,0.08); overflow:hidden; max-width:220px; }
+    .bkp-bar-fill { height:100%; border-radius:99px; transition:width 0.4s ease; }
+    .bkp-bar-lbl  { font-size:11px; color:rgba(255,255,255,0.3); white-space:nowrap; }
+
+    /* ── Per-bank colour themes ── */
+    .bkp-s .bkp-head  { background:linear-gradient(135deg,#071a12 0%,#0d2018 100%); border-color:rgba(0,200,150,0.3); }
+    .bkp-m .bkp-head  { background:linear-gradient(135deg,#181408 0%,#201a08 100%); border-color:rgba(255,217,61,0.3); }
+    .bkp-r .bkp-head  { background:linear-gradient(135deg,#1a080d 0%,#220812 100%); border-color:rgba(255,77,106,0.3); }
+    .bkp-s .bkp-stripe { background:linear-gradient(180deg,#00C896,#007a5a); }
+    .bkp-m .bkp-stripe { background:linear-gradient(180deg,#ffd93d,#b89a00); }
+    .bkp-r .bkp-stripe { background:linear-gradient(180deg,#FF4D6A,#aa1a30); }
+    .bkp-s .bkp-rate-num { color:#00C896; }
+    .bkp-m .bkp-rate-num { color:#ffd93d; }
+    .bkp-r .bkp-rate-num { color:#FF4D6A; }
+    .bkp-s .bkp-bar-fill  { background:#00C896; }
+    .bkp-m .bkp-bar-fill  { background:#ffd93d; }
+    .bkp-r .bkp-bar-fill  { background:#FF4D6A; }
+    .bkp-s .bkp-rate-col  { background:rgba(0,200,150,0.05); }
+    .bkp-m .bkp-rate-col  { background:rgba(255,217,61,0.05); }
+    .bkp-r .bkp-rate-col  { background:rgba(255,77,106,0.05); }
+
+    /* ── Accordion body ── */
+    .bkp-body { padding:20px 24px 22px; border:1px solid; border-top:none; border-radius:0 0 18px 18px; }
+    .bkp-s .bkp-body { background:#050e09; border-color:rgba(0,200,150,0.2); }
+    .bkp-m .bkp-body { background:#0e0c04; border-color:rgba(255,217,61,0.2); }
+    .bkp-r .bkp-body { background:#0e0407; border-color:rgba(255,77,106,0.2); }
+    .bkp-body-lbl { font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.3); margin-bottom:14px; }
+
+    /* ── Loan amount buttons — hide Streamlit chrome ── */
+    .loan-amt-btn button {
+        border-radius:10px !important; font-weight:700 !important;
+        font-size:14px !important; height:46px !important;
+        font-family:'Space Grotesk',monospace !important;
+        transition:transform 0.12s, box-shadow 0.12s !important;
+    }
+    .loan-amt-btn button:not(:disabled):hover { transform:translateY(-2px) !important; box-shadow:0 4px 14px rgba(0,0,0,0.4) !important; }
+
+    /* first 4 buttons per bank */
+    .bkp-s .loan-amt-btn button { background:rgba(0,200,150,0.1) !important; border:1px solid rgba(0,200,150,0.35) !important; color:#00C896 !important; }
+    .bkp-m .loan-amt-btn button { background:rgba(255,217,61,0.08) !important; border:1px solid rgba(255,217,61,0.35) !important; color:#ffd93d !important; }
+    .bkp-r .loan-amt-btn button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.35) !important; color:#FF4D6A !important; }
+    /* 5th (max) button always pink */
+    .loan-amt-btn.loan-max button { background:rgba(236,72,153,0.1) !important; border:1px solid rgba(236,72,153,0.4) !important; color:#ec4899 !important; }
+
+    /* ── Repay buttons ── */
+    .repay-btn button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.25) !important; color:#FF4D6A !important; font-weight:600 !important; border-radius:10px !important; height:46px !important; }
+
+    /* ── Outstanding loan summary card ── */
+    .bkp-summary {
+        background:linear-gradient(135deg,#0d0a1a 0%,#130f22 100%);
+        border:1px solid rgba(167,139,250,0.3);
+        border-radius:16px; padding:20px 24px;
+        display:flex; align-items:center; justify-content:space-between;
+        margin-bottom:20px; flex-wrap:wrap; gap:12px;
+    }
+    .bkp-summary-left .s-tag { font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(167,139,250,0.6); margin-bottom:6px; }
+    .bkp-summary-left .s-amt { font-size:34px; font-weight:900; font-family:'Space Grotesk',monospace; color:#a78bfa; line-height:1; }
+    .bkp-summary-right { font-size:12px; color:rgba(255,255,255,0.25); font-style:italic; text-align:right; }
+
+    /* light mode overrides */
+    body.light-mode .bkp-s .bkp-head  { background:linear-gradient(135deg,#edfff7,#d8f7eb); border-color:rgba(0,150,90,0.4); }
+    body.light-mode .bkp-m .bkp-head  { background:linear-gradient(135deg,#fefde8,#faf5c0); border-color:rgba(160,120,0,0.4); }
+    body.light-mode .bkp-r .bkp-head  { background:linear-gradient(135deg,#fff0f3,#fde0e6); border-color:rgba(180,0,30,0.4); }
+    body.light-mode .bkp-s .bkp-body  { background:#f0fff8; border-color:rgba(0,150,90,0.25); }
+    body.light-mode .bkp-m .bkp-body  { background:#fefde0; border-color:rgba(160,120,0,0.25); }
+    body.light-mode .bkp-r .bkp-body  { background:#fde8ed; border-color:rgba(180,0,30,0.25); }
+    body.light-mode .bkp-name          { color:#0d2e0d; }
+    body.light-mode .bkp-meta          { color:#4a6a4a; }
+    body.light-mode .bkp-note          { color:#7a947a; }
+    body.light-mode .bkp-chev          { color:rgba(0,60,0,0.3); }
+    body.light-mode .bkp-bar-lbl       { color:rgba(0,60,0,0.4); }
+    body.light-mode .bkp-bar-bg        { background:rgba(0,60,0,0.08); }
+    body.light-mode .bkp-s .bkp-rate-num { color:#006b3c; }
+    body.light-mode .bkp-m .bkp-rate-num { color:#7a5c00; }
+    body.light-mode .bkp-r .bkp-rate-num { color:#a0001e; }
+    body.light-mode .bkp-body-lbl      { color:rgba(0,60,0,0.4); }
+    body.light-mode .bkp-summary { background:linear-gradient(135deg,#f5f0ff,#ede8ff); border-color:rgba(120,80,220,0.3); }
+    body.light-mode .bkp-summary-left .s-tag { color:rgba(100,60,200,0.6); }
+    body.light-mode .bkp-summary-left .s-amt { color:#5b3fa0; }
+    body.light-mode .bkp-summary-right { color:rgba(0,0,0,0.3); }
     </style>""", unsafe_allow_html=True)
 
-    css_map = {"bank-safe": "bk-s", "bank-mid": "bk-m", "bank-risky": "bk-r"}
-    # Per-bank button colour config
-    bk_styles = {
-        "rbi_safe":     ("rgba(0,200,150,0.08)",  "rgba(0,200,150,0.35)",  "#00C896"),
-        "axis_mid":     ("rgba(255,217,61,0.07)",  "rgba(255,217,61,0.35)", "#ffd93d"),
-        "hawala_risky": ("rgba(255,77,106,0.07)",  "rgba(255,77,106,0.35)", "#FF4D6A"),
+    # ── Outstanding loan summary ───────────────────────────────────────────────
+    if loan_balance > 0:
+        st.markdown(f"""
+        <div class="bkp-summary">
+          <div class="bkp-summary-left">
+            <div class="s-tag">Outstanding Debt</div>
+            <div class="s-amt">{fmt(loan_balance)}</div>
+          </div>
+          <div class="bkp-summary-right">Interest charged<br>per bank at round-end.</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Bank config ────────────────────────────────────────────────────────────
+    BK_THEME = {
+        "rbi_safe":     "bkp-s",
+        "axis_mid":     "bkp-m",
+        "hawala_risky": "bkp-r",
+    }
+    BK_ICONS = {
+        "rbi_safe":     "🏛",
+        "axis_mid":     "🏦",
+        "hawala_risky": "💀",
     }
 
     for bk_id, bk in BANKS.items():
@@ -1255,38 +1342,65 @@ elif active == "loans":
         used_pct  = int(bank_bal / bk["cap"] * 100) if bk["cap"] else 0
         available = max(0, bk["cap"] - bank_bal)
         is_open   = st.session_state.get("bank_open") == bk_id
-        cls       = css_map.get(bk["css"], "bk-s")
-        bg, border, col = bk_styles.get(bk_id, ("rgba(255,255,255,0.05)", "rgba(255,255,255,0.2)", "#fff"))
-        bg_active = bg.replace("0.08","0.15").replace("0.07","0.14")
+        theme     = BK_THEME.get(bk_id, "bkp-s")
+        icon      = BK_ICONS.get(bk_id, "🏦")
+        open_cls  = "bkp-open" if is_open else ""
+        chev      = "▾" if is_open else "▸"
 
-        # Inject button style scoped to this bank's container
+        # ── Rich HTML header panel ─────────────────────────────────────────────
         st.markdown(f"""
-        <style>
-        div[data-testid="stVerticalBlock"]:has(> div > div > button[kind="secondary"][data-key="bk_{bk_id}"]) > div > div > button {{
-            background: {bg_active if is_open else bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 14px !important;
-            color: {col} !important;
-            font-family: 'Space Grotesk', monospace !important;
-            font-size: 13px !important;
-            font-weight: 700 !important;
-            text-align: left !important;
-            padding: 18px 22px !important;
-            height: auto !important;
-            min-height: 90px !important;
-            line-height: 1.5 !important;
-            white-space: pre-wrap !important;
-        }}
-        </style>""", unsafe_allow_html=True)
+        <div class="bkp-wrap {theme}">
+          <div class="bkp-head {open_cls}">
+            <div class="bkp-stripe"></div>
+            <div class="bkp-content">
+              <div class="bkp-name">{icon}&nbsp; {bk['name']}</div>
+              <div class="bkp-meta">Limit: {fmt(bk['cap'])} &nbsp;·&nbsp; Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
+              <div class="bkp-bar-wrap">
+                <div class="bkp-bar-bg"><div class="bkp-bar-fill" style="width:{used_pct}%"></div></div>
+                <span class="bkp-bar-lbl">{used_pct}% used</span>
+              </div>
+              <div class="bkp-note">{bk['note']}</div>
+            </div>
+            <div class="bkp-rate-col">
+              <div class="bkp-rate-num">{int(bk['rate']*100)}%</div>
+              <div class="bkp-rate-lbl">per round</div>
+            </div>
+            <div class="bkp-chev">{chev}</div>
+          </div>
+        </div>""", unsafe_allow_html=True)
 
-        btn_text = f"{bk['name']}   {'▾' if is_open else '▸'}\n{bk['rate_label']}\nLimit: {fmt(bk['cap'])}  ·  Borrowed: {fmt(bank_bal)} ({used_pct}%)\n{bk['note']}"
-        if st.button(btn_text, key=f"bk_{bk_id}", use_container_width=True):
+        # ── Hidden toggle button (triggered by the HTML panel above via JS) ────
+        st.markdown(f'<div style="display:none" id="bk-btn-wrap-{bk_id}">', unsafe_allow_html=True)
+        if st.button("toggle", key=f"bk_{bk_id}"):
             st.session_state["bank_open"] = None if is_open else bk_id
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        # Accordion
+        # Wire HTML panel click → hidden Streamlit button via JS
+        import streamlit.components.v1 as _bk_stc
+        _bk_stc.html(f"""<script>
+        (function(){{
+          var P = window.parent.document;
+          function wire() {{
+            var panel = P.querySelector('.bkp-wrap.{theme} .bkp-head');
+            if (!panel) {{ setTimeout(wire, 100); return; }}
+            // avoid double-wiring
+            if (panel.dataset.wired === '{bk_id}') return;
+            panel.dataset.wired = '{bk_id}';
+            panel.addEventListener('click', function() {{
+              var btn = P.querySelector('div#bk-btn-wrap-{bk_id} ~ div button, div#bk-btn-wrap-{bk_id} + div button');
+              // fallback: find by key attribute
+              if (!btn) btn = P.querySelector('button[data-key="bk_{bk_id}"]');
+              if (btn) btn.click();
+            }});
+          }}
+          wire();
+        }})();
+        </script>""", height=0)
+
+        # ── Accordion body ─────────────────────────────────────────────────────
         if is_open:
-            st.markdown(f'<div class="bk-body {cls}">', unsafe_allow_html=True)
+            st.markdown(f'<div class="bkp-body {theme}">', unsafe_allow_html=True)
             if not can_bank:
                 st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.4);margin:0">Borrowing is only available during trading rounds and breaks.</p>', unsafe_allow_html=True)
             elif available <= 0:
@@ -1294,11 +1408,14 @@ elif active == "loans":
             else:
                 valid_amts = [a for a in bk["borrow_options"] if a <= available]
                 if valid_amts:
-                    st.markdown('<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 12px">Choose amount to borrow:</p>', unsafe_allow_html=True)
+                    st.markdown('<div class="bkp-body-lbl">Choose amount to borrow</div>', unsafe_allow_html=True)
                     bcols = st.columns(len(valid_amts))
                     for i, amt in enumerate(valid_amts):
+                        # last button in the list = max available → pink
+                        is_max = (i == len(valid_amts) - 1) and len(valid_amts) > 1
+                        max_cls = "loan-max" if is_max else ""
                         with bcols[i]:
-                            st.markdown('<div class="loan-btn">', unsafe_allow_html=True)
+                            st.markdown(f'<div class="loan-amt-btn {max_cls}">', unsafe_allow_html=True)
                             if st.button(fmt(amt), key=f"borrow_{bk_id}_{amt}", use_container_width=True):
                                 state = load_state(); team = state["teams"][tid]
                                 team["cash"] = team.get("cash", 0) + amt
@@ -1312,17 +1429,18 @@ elif active == "loans":
                     st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">No valid amounts available.</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── Repay section (break only) ─────────────────────────────────────────────
     if phase == "between" and loan_balance > 0:
-        st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:20px 0 8px">Repay now to reduce interest before next round:</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:24px 0 10px">Repay now to reduce interest before the next round:</p>', unsafe_allow_html=True)
         repay_options = []
         if loan_balance >= 4: repay_options.append(("Pay ¼", loan_balance//4))
         if loan_balance >= 2: repay_options.append(("Pay ½", loan_balance//2))
-        repay_options.append(("Pay full", loan_balance))
+        repay_options.append(("Pay Full", loan_balance))
         rcols = st.columns(len(repay_options))
         for i, (label, amount) in enumerate(repay_options):
             with rcols[i]:
                 st.markdown('<div class="repay-btn">', unsafe_allow_html=True)
-                if st.button(f"{label} ({fmt(amount)})", key=f"repay_{i}", use_container_width=True, disabled=(team["cash"]<amount)):
+                if st.button(f"{label}  {fmt(amount)}", key=f"repay_{i}", use_container_width=True, disabled=(team["cash"]<amount)):
                     state = load_state(); team = state["teams"][tid]
                     if team["cash"] >= amount:
                         team["cash"] -= amount; team["loan_balance"] = max(0,team.get("loan_balance",0)-amount)
