@@ -1365,15 +1365,8 @@ elif active == "loans":
         open_cls  = "bkp-open" if is_open else ""
         chev      = "▾" if is_open else "▸"
 
-        # Pure HTML panel — clicking sets ?bank_open=id in URL, Python reads it on next rerun
-        # No st.button anywhere near here = zero ghost boxes
-        current_url_params = "&".join(f"{k}={v}" for k, v in st.query_params.to_dict().items() if k != "bank_open")
-        toggle_val = "" if is_open else bk_id  # empty = close, bk_id = open
         st.markdown(f"""
-        <a href="?bank_open={toggle_val}{('&'+current_url_params) if current_url_params else ''}"
-           style="text-decoration:none;display:block;margin-bottom:0"
-           data-bank="{bk_id}">
-        <div class="bkp-wrap {theme}">
+        <div class="bkp-wrap {theme}" id="bkcard-{bk_id}" style="cursor:pointer;margin-bottom:16px">
           <div class="bkp-head {open_cls}">
             <div class="bkp-stripe"></div>
             <div class="bkp-content">
@@ -1391,8 +1384,35 @@ elif active == "loans":
             </div>
             <div class="bkp-chev">{chev}</div>
           </div>
-        </div>
-        </a>""", unsafe_allow_html=True)
+        </div>""", unsafe_allow_html=True)
+
+        # Wire click: JS sets ?bank_open=id in the parent URL (same tab, no navigation).
+        # Streamlit reads st.query_params on every rerun — the 3s autorefresh picks it up.
+        import streamlit.components.v1 as _bkc
+        _bkc.html(f"""<script>
+        (function(){{
+          var P = window.parent;
+          function wire() {{
+            var card = P.document.getElementById('bkcard-{bk_id}');
+            if (!card) {{ setTimeout(wire, 80); return; }}
+            if (card.dataset.wired === '1') return;
+            card.dataset.wired = '1';
+            card.addEventListener('click', function(e) {{
+              e.preventDefault(); e.stopPropagation();
+              var url = new URL(P.location.href);
+              var cur = url.searchParams.get('bank_open');
+              if (cur === '{bk_id}') {{
+                url.searchParams.delete('bank_open');
+              }} else {{
+                url.searchParams.set('bank_open', '{bk_id}');
+              }}
+              // replaceState stays on the same page — Streamlit picks up on next rerun
+              P.history.replaceState({{}}, '', url.toString());
+            }});
+          }}
+          wire();
+        }})();
+        </script>""", height=0)
 
         # ── Accordion body ─────────────────────────────────────────────────────
         if is_open:
