@@ -504,23 +504,18 @@ _stc_music.html(f"""<script>
 </script>""", height=0)
 
 # ── Live micro-fluctuation engine ────────────────────────────────────────────
-# Real prices only change at round start (host). This adds visual micro-ticks
-# every ~3s during trading so charts show live movement. Stored in session state
-# only — never written to game_state.json, so it doesn't affect real prices.
 import random as _random
 
-MICRO_VOL = {  # per-tick max % move (purely visual) — kept conservative
+MICRO_VOL = { 
     "zora":0.003, "streamvx":0.010, "freshco":0.002, "voltex":0.008,
     "mediq":0.009, "skylink":0.012, "swifthaul":0.005, "crownmart":0.009, "shieldgen":0.003,
 }
 
 if "micro_prices" not in st.session_state or st.session_state.get("micro_phase") != phase:
-    # Initialise from real prices
     st.session_state["micro_prices"] = {cid: c["price"] for cid, c in state["companies"].items()}
     st.session_state["micro_phase"] = phase
     st.session_state["micro_tick"] = 0
 
-# Sync if real price drifts far from micro price (e.g. after round start)
 for cid, c in state["companies"].items():
     mp = st.session_state["micro_prices"].get(cid, c["price"])
     if abs(mp - c["price"]) / c["price"] > 0.08:  # >8% drift → resync
@@ -537,11 +532,9 @@ if phase == "trading":
             change = direction * _random.uniform(vol * 0.3, vol)
             st.session_state["micro_prices"][cid] = max(10, round(mp * (1 + change), 1))
 
-# Build display_hist: real price history lives in game_state; micro ticks in session only
 if "price_history" not in team:
     team["price_history"] = {cid: [c["price"]] for cid, c in state["companies"].items()}
 
-# Accumulate micro ticks in session state only — never written to disk
 if "micro_hist" not in st.session_state or st.session_state.get("micro_hist_phase") != phase:
     st.session_state["micro_hist"] = {cid: [] for cid in state["companies"]}
     st.session_state["micro_hist_phase"] = phase
@@ -554,7 +547,6 @@ if phase == "trading":
         if len(buf) > 60: buf = buf[-60:]
         st.session_state["micro_hist"][cid] = buf
 
-# FIX 4: Game over screen — show immediately after ticker, no banner, no progress
 if phase == "ended":
     port_val = sum(team["holdings"].get(cid,0) * state["companies"][cid]["price"] for cid in state["companies"])
     loan_balance = team.get("loan_balance", 0)
@@ -565,12 +557,11 @@ if phase == "ended":
       <p>Results will be announced shortly by your event coordinator.</p>
       <p style="margin-top:24px;font-size:14px;color:rgba(255,255,255,0.2)">Your final net worth: <strong style="color:#00C896">{fmt(net_worth)}</strong></p>
     </div>""", unsafe_allow_html=True)
-    st.stop()  # Don't render anything else after game over
+    st.stop() 
 
 # ── Header + Settings (non-ended phases only) ────────────────────────────────
 participant_tag = f' &nbsp;<span style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.35)">· P{team.get("participant_num","")}</span>' if team.get("participant_num") else ""
 
-# Settings state — read from query params so JS can write them without a rerun
 _qp = st.query_params
 if "music_volume" not in st.session_state:
     st.session_state["music_volume"] = int(_qp.get("vol", 50))
@@ -581,7 +572,6 @@ if "chart_type" not in st.session_state:
 if "intel_popup" not in st.session_state:
     st.session_state["intel_popup"] = _qp.get("intel_popup", "off") == "on"
 
-# Handle query param updates from the JS settings panel
 _qp_vol   = _qp.get("vol")
 _qp_theme = _qp.get("theme")
 _qp_chart = _qp.get("chart")
@@ -622,7 +612,6 @@ _light = st.session_state["light_mode"]
 _chart = st.session_state.get("chart_type", "line")
 _intel_popup = st.session_state.get("intel_popup", False)
 
-# Header (plain HTML — renders fine, no scripts needed here)
 st.markdown(f"""
 <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 20px;flex-wrap:wrap;gap:10px">
   <div>
@@ -1325,7 +1314,6 @@ elif active == "loans":
           <div class="bkp-summary-right">Interest charged<br>per bank at round-end.</div>
         </div>""", unsafe_allow_html=True)
 
-    # ── Bank config ────────────────────────────────────────────────────────────
     BK_THEME = {
         "rbi_safe":     "bkp-s",
         "axis_mid":     "bkp-m",
@@ -1347,9 +1335,33 @@ elif active == "loans":
         open_cls  = "bkp-open" if is_open else ""
         chev      = "▾" if is_open else "▸"
 
-        # ── Rich HTML header panel ─────────────────────────────────────────────
+        # ── Invisible Streamlit button absolutely overlaid on the HTML card ────
+        # The CSS makes the button transparent + fills the card area exactly.
+        # Clicking anywhere on the card hits the button. No visible toggle.
         st.markdown(f"""
-        <div class="bkp-wrap {theme}">
+        <style>
+        /* scoped to this bank's button key */
+        button[data-testid="baseButton-secondary"][data-key="bk_{bk_id}"] {{
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            z-index: 10 !important;
+            border: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }}
+        /* The st.columns / stVerticalBlock wrapper that holds this button */
+        div[data-testid="stVerticalBlock"]:has(button[data-key="bk_{bk_id}"]) {{
+            position: relative !important;
+            margin-bottom: 0 !important;
+            padding: 0 !important;
+        }}
+        </style>
+        <div class="bkp-wrap {theme}" style="position:relative">
           <div class="bkp-head {open_cls}">
             <div class="bkp-stripe"></div>
             <div class="bkp-content">
@@ -1368,35 +1380,9 @@ elif active == "loans":
             <div class="bkp-chev">{chev}</div>
           </div>
         </div>""", unsafe_allow_html=True)
-
-        # ── Hidden toggle button (triggered by the HTML panel above via JS) ────
-        st.markdown(f'<div style="display:none" id="bk-btn-wrap-{bk_id}">', unsafe_allow_html=True)
-        if st.button("toggle", key=f"bk_{bk_id}"):
+        if st.button("", key=f"bk_{bk_id}", use_container_width=True):
             st.session_state["bank_open"] = None if is_open else bk_id
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Wire HTML panel click → hidden Streamlit button via JS
-        import streamlit.components.v1 as _bk_stc
-        _bk_stc.html(f"""<script>
-        (function(){{
-          var P = window.parent.document;
-          function wire() {{
-            var panel = P.querySelector('.bkp-wrap.{theme} .bkp-head');
-            if (!panel) {{ setTimeout(wire, 100); return; }}
-            // avoid double-wiring
-            if (panel.dataset.wired === '{bk_id}') return;
-            panel.dataset.wired = '{bk_id}';
-            panel.addEventListener('click', function() {{
-              var btn = P.querySelector('div#bk-btn-wrap-{bk_id} ~ div button, div#bk-btn-wrap-{bk_id} + div button');
-              // fallback: find by key attribute
-              if (!btn) btn = P.querySelector('button[data-key="bk_{bk_id}"]');
-              if (btn) btn.click();
-            }});
-          }}
-          wire();
-        }})();
-        </script>""", height=0)
 
         # ── Accordion body ─────────────────────────────────────────────────────
         if is_open:
@@ -1429,7 +1415,6 @@ elif active == "loans":
                     st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0">No valid amounts available.</p>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Repay section (break only) ─────────────────────────────────────────────
     if phase == "between" and loan_balance > 0:
         st.markdown('<p style="font-size:13px;color:rgba(255,255,255,0.5);margin:24px 0 10px">Repay now to reduce interest before the next round:</p>', unsafe_allow_html=True)
         repay_options = []
@@ -1465,5 +1450,3 @@ elif active == "portfolio":
             cp = c["price"]; avg = team["avg_cost"].get(cid,0); cv = qty*cp; pl = cv-qty*avg
             plc = "delta-up" if pl>=0 else "delta-down"; pls = "+" if pl>=0 else ""
             st.markdown(f'<div class="port-card"><div><div class="port-name">{c["name"]}</div><div class="port-qty">{qty} shares · {c["sector"]}</div></div><div class="port-stats"><div class="port-stat"><div class="s-label">Avg cost</div><div class="s-val">{fmt(avg)}</div></div><div class="port-stat"><div class="s-label">Current</div><div class="s-val">{fmt(cp)}</div></div><div class="port-stat"><div class="s-label">Value</div><div class="s-val">{fmt(cv)}</div></div><div class="port-stat"><div class="s-label">P / L</div><div class="s-val {plc}">{pls}{fmt(pl)}</div></div></div></div>', unsafe_allow_html=True)
-
-# Auto-refresh handled by st_autorefresh(interval=1000) at top of file
