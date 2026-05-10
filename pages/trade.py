@@ -158,7 +158,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .gameover-screen p { font-size:18px; color:rgba(255,255,255,0.4); max-width:500px; margin:0 auto; line-height:1.7; }
 
 /* ═══════════════════════════════════════════════════════
-   LIGHT MODE — full off-white theme with dark-green accents
+   LIGHT MODE — warm cream, slate accents, proper contrast
    ═══════════════════════════════════════════════════════ */
 body.light-mode,
 body.light-mode [data-testid="stAppViewContainer"],
@@ -167,23 +167,23 @@ body.light-mode section.main,
 body.light-mode .block-container,
 body.light-mode [data-testid="column"],
 body.light-mode [data-testid="stVerticalBlock"] {
-  background: #f0f4f0 !important; color: #1a2e1a !important;
+  background: #f5f2ed !important; color: #1c2b1c !important;
 }
 
 /* Ticker */
-body.light-mode .ticker-wrap { background:#d4e8d4; border-color:#a8cca8; }
-body.light-mode .ticker-item { color:#2d5a2d; }
-body.light-mode .ticker-item .sym { color:#0d2e0d; font-weight:800; }
-body.light-mode .ticker-item .up   { color:#006b3c; }
-body.light-mode .ticker-item .down { color:#c0392b; }
+body.light-mode .ticker-wrap { background:#ece6dd; border-color:#d5cdc3; }
+body.light-mode .ticker-item { color:#3d3328; }
+body.light-mode .ticker-item .sym { color:#1c2b1c; font-weight:800; }
+body.light-mode .ticker-item .up   { color:#0a6640; }
+body.light-mode .ticker-item .down { color:#b83232; }
 
 /* Phase banners */
-body.light-mode .phase-lobby   { background:rgba(180,140,0,0.1); border-color:rgba(180,140,0,0.35); color:#7a5c00; }
-body.light-mode .phase-trading { background:rgba(0,120,70,0.08); border-color:rgba(0,120,70,0.3);  color:#005c32; }
-body.light-mode .phase-between { background:rgba(180,80,0,0.08); border-color:rgba(180,80,0,0.3);  color:#7a3800; }
-body.light-mode .phase-ended   { background:rgba(160,0,30,0.07); border-color:rgba(160,0,30,0.25); color:#8b0000; }
+body.light-mode .phase-lobby   { background:rgba(140,100,0,0.08);  border-color:rgba(140,100,0,0.28);  color:#6b4c00; }
+body.light-mode .phase-trading { background:rgba(0,100,55,0.07);   border-color:rgba(0,100,55,0.25);   color:#004d28; }
+body.light-mode .phase-between { background:rgba(150,65,0,0.07);   border-color:rgba(150,65,0,0.25);   color:#6b2d00; }
+body.light-mode .phase-ended   { background:rgba(140,0,25,0.06);   border-color:rgba(140,0,25,0.2);    color:#730015; }
 
-/* All cards */
+/* All cards — warm white with subtle warm shadow */
 body.light-mode .metric-card,
 body.light-mode .company-card,
 body.light-mode .news-card,
@@ -191,75 +191,81 @@ body.light-mode .loan-card,
 body.light-mode .port-card,
 body.light-mode .lb-card,
 body.light-mode .rule-card {
-  background: #ffffff !important;
-  border-color: #c2d9c2 !important;
-  box-shadow: 0 1px 4px rgba(0,60,0,0.07);
+  background: #fffef9 !important;
+  border-color: #ddd5c8 !important;
+  box-shadow: 0 2px 8px rgba(60,40,0,0.07) !important;
 }
 
-/* Bank cards */
-body.light-mode .bank-safe  { background:#f5fff8 !important; border-color:rgba(0,120,70,0.4) !important; }
-body.light-mode .bank-mid   { background:#fffef0 !important; border-color:rgba(160,120,0,0.4) !important; }
-body.light-mode .bank-risky { background:#fff5f5 !important; border-color:rgba(180,0,30,0.35) !important; }
-body.light-mode .bank-card .bk-name { color:#0d2e0d !important; }
-body.light-mode .bank-safe  .bk-rate { color:#006b3c !important; }
-body.light-mode .bank-mid   .bk-rate { color:#7a5c00 !important; }
-body.light-mode .bank-risky .bk-rate { color:#a0001e !important; }
-body.light-mode .bank-card .bk-limit { color:#4a6a4a !important; }
-body.light-mode .bank-card .bk-note  { color:#7a947a !important; }
-body.light-mode .loan-card  { background:#f8f5ff !important; border-color:rgba(100,60,200,0.25) !important; }
-body.light-mode .loan-title { color:#5b3fa0 !important; }
+/* Bank panels — light mode */
+body.light-mode .bkp-s .bkp-head  { background:linear-gradient(135deg,#edfff7,#d8f5ec) !important; border-color:rgba(0,130,80,0.32) !important; }
+body.light-mode .bkp-m .bkp-head  { background:linear-gradient(135deg,#fffbe8,#f5f0c8) !important; border-color:rgba(140,100,0,0.32) !important; }
+body.light-mode .bkp-r .bkp-head  { background:linear-gradient(135deg,#fff0f3,#fde0e6) !important; border-color:rgba(160,0,30,0.32) !important; }
+body.light-mode .bkp-s .bkp-body  { background:#f0fff8 !important; border-color:rgba(0,130,80,0.18) !important; }
+body.light-mode .bkp-m .bkp-body  { background:#fdfde8 !important; border-color:rgba(140,100,0,0.18) !important; }
+body.light-mode .bkp-r .bkp-body  { background:#fde8ed !important; border-color:rgba(160,0,30,0.18) !important; }
+body.light-mode .bkp-name  { color:#1c2b1c !important; }
+body.light-mode .bkp-meta,
+body.light-mode .bkp-bar-lbl { color:#5a6a5a !important; }
+body.light-mode .bkp-note  { color:#8a9a8a !important; }
+body.light-mode .bkp-s .bkp-rate-num { color:#006b40 !important; }
+body.light-mode .bkp-m .bkp-rate-num { color:#7a5c00 !important; }
+body.light-mode .bkp-r .bkp-rate-num { color:#a0001e !important; }
+body.light-mode .bkp-rate-lbl  { color:#8a9a8a !important; }
+body.light-mode .bkp-chev      { color:rgba(0,40,0,0.22) !important; }
+body.light-mode .bkp-bar-bg    { background:rgba(0,40,0,0.07) !important; }
+body.light-mode .bkp-body-lbl  { color:rgba(0,40,0,0.32) !important; }
+body.light-mode .bkp-summary   { background:linear-gradient(135deg,#f0ebff,#e8e0ff) !important; border-color:rgba(100,60,200,0.25) !important; }
+body.light-mode .bkp-summary-left .s-tag { color:rgba(80,40,180,0.5) !important; }
+body.light-mode .bkp-summary-left .s-amt { color:#4a28a0 !important; }
+body.light-mode .bkp-summary-right { color:rgba(0,0,0,0.25) !important; }
 
-/* Text colours */
-body.light-mode .section-hdr           { color:#0d2e0d !important; border-color:#c2d9c2 !important; }
+/* Text */
+body.light-mode .section-hdr           { color:#1c2b1c !important; border-color:#ddd5c8 !important; }
 body.light-mode .company-name,
 body.light-mode .port-name,
 body.light-mode .lb-name,
-body.light-mode .rule-content h4       { color:#0d2e0d !important; }
+body.light-mode .rule-content h4       { color:#1c2b1c !important; }
 body.light-mode .company-meta,
 body.light-mode .company-trait,
-body.light-mode .bk-limit,
-body.light-mode .bk-note,
 body.light-mode .port-qty,
-body.light-mode .rule-content p        { color:#4a6a4a !important; }
-body.light-mode .company-bio           { color:#3a5a3a !important; background:rgba(0,100,50,0.04); border-left-color:#a8cca8; }
-body.light-mode .news-text             { color:#1a2e1a !important; }
-body.light-mode .price-main            { color:#0d2e0d !important; }
-body.light-mode .metric-card .label   { color:#4a6a4a !important; }
+body.light-mode .rule-content p        { color:#5a6a5a !important; }
+body.light-mode .company-bio           { color:#3a4a3a !important; background:rgba(0,80,40,0.04) !important; border-left-color:#c0d8c0 !important; }
+body.light-mode .news-text             { color:#1c2b1c !important; }
+body.light-mode .price-main            { color:#1c2b1c !important; }
+body.light-mode .metric-card .label   { color:#5a6a5a !important; }
 body.light-mode .metric-card .value,
 body.light-mode .port-stat .s-val,
-body.light-mode .lb-stat .ls2-val      { color:#0d2e0d !important; }
-body.light-mode .metric-card .delta.delta-neutral { color:#7a947a !important; }
+body.light-mode .lb-stat .ls2-val      { color:#1c2b1c !important; }
+body.light-mode .metric-card .delta.delta-neutral { color:#8a9a8a !important; }
 body.light-mode .lb-stat .ls2-label,
-body.light-mode .port-stat .s-label    { color:#7a947a !important; }
-body.light-mode .lb-nw                 { color:#006b3c !important; }
-body.light-mode .lb-rank               { color:rgba(0,60,0,0.15) !important; }
+body.light-mode .port-stat .s-label    { color:#8a9a8a !important; }
+body.light-mode .lb-nw                 { color:#006b40 !important; }
+body.light-mode .lb-rank               { color:rgba(0,50,0,0.12) !important; }
 body.light-mode .lb-rank.gold          { color:#b8860b !important; }
 body.light-mode .lb-rank.silver        { color:#708090 !important; }
 body.light-mode .lb-rank.bronze        { color:#8b5e3c !important; }
-body.light-mode .rule-num              { color:rgba(0,120,60,0.2) !important; }
+body.light-mode .rule-num              { color:rgba(0,100,50,0.14) !important; }
 
-/* Nav buttons */
-body.light-mode .nav-btn { border-right-color:#c2d9c2 !important; }
-body.light-mode .nav-market  { background:rgba(0,120,70,0.07);  color:rgba(0,100,50,0.5); }
-body.light-mode .nav-intel   { background:rgba(160,120,0,0.07); color:rgba(130,90,0,0.5); }
-body.light-mode .nav-banks   { background:rgba(100,60,200,0.06);color:rgba(80,40,180,0.5); }
-body.light-mode .nav-portf   { background:rgba(30,80,200,0.06); color:rgba(20,60,180,0.5); }
-body.light-mode .nav-market.nav-active  { background:rgba(0,120,70,0.15);  color:#006b3c; }
-body.light-mode .nav-intel.nav-active   { background:rgba(160,120,0,0.15); color:#7a5c00; }
-body.light-mode .nav-banks.nav-active   { background:rgba(100,60,200,0.12);color:#4a24b0; }
-body.light-mode .nav-portf.nav-active   { background:rgba(30,80,200,0.12); color:#1a3ea0; }
-
-/* Nav row border */
-body.light-mode .nav-row { border-color:#c2d9c2 !important; }
+/* Nav */
+body.light-mode .nav-btn { border-right-color:#ddd5c8 !important; }
+body.light-mode .nav-market  { background:rgba(0,100,55,0.06);  color:rgba(0,80,40,0.42); }
+body.light-mode .nav-intel   { background:rgba(140,100,0,0.06); color:rgba(110,75,0,0.42); }
+body.light-mode .nav-banks   { background:rgba(80,50,180,0.05); color:rgba(60,35,160,0.42); }
+body.light-mode .nav-portf   { background:rgba(20,70,190,0.05); color:rgba(15,55,170,0.42); }
+body.light-mode .nav-market.nav-active  { background:rgba(0,100,55,0.12);  color:#004d28; border-color:rgba(0,100,55,0.28); }
+body.light-mode .nav-intel.nav-active   { background:rgba(140,100,0,0.12); color:#6b4c00; border-color:rgba(140,100,0,0.28); }
+body.light-mode .nav-banks.nav-active   { background:rgba(80,50,180,0.1);  color:#3c20a0; border-color:rgba(80,50,180,0.28); }
+body.light-mode .nav-portf.nav-active   { background:rgba(20,70,190,0.1);  color:#0f3794; border-color:rgba(20,70,190,0.28); }
+body.light-mode .nav-row { border-color:#ddd5c8 !important; }
 
 /* Buttons */
-body.light-mode .buy-btn  button { background:#d4f0e4 !important; border-color:#006b3c !important; color:#006b3c !important; }
-body.light-mode .sell-btn button { background:#fde8e8 !important; border-color:#c0392b !important; color:#c0392b !important; }
-body.light-mode .max-btn  button { background:#fef9e0 !important; border-color:#a08000 !important; color:#7a5c00 !important; }
-body.light-mode .loan-btn button { background:#ede8ff !important; border-color:#5b3fa0 !important; color:#5b3fa0 !important; }
-body.light-mode .repay-btn button{ background:#fde8e8 !important; border-color:#c0392b !important; color:#c0392b !important; }
+body.light-mode .buy-btn  button { background:#d6f0e6 !important; border-color:#0a6640 !important; color:#004d28 !important; }
+body.light-mode .sell-btn button { background:#fde6e6 !important; border-color:#b83232 !important; color:#8b1a1a !important; }
+body.light-mode .max-btn  button { background:#fef5e0 !important; border-color:#a07800 !important; color:#6b5000 !important; }
+body.light-mode .loan-btn button { background:#ede8ff !important; border-color:#5b3fa0 !important; color:#4a28a0 !important; }
+body.light-mode .repay-btn button{ background:#fde6e6 !important; border-color:#b83232 !important; color:#8b1a1a !important; }
 
-/* Hide Altair chart toolbar (fullscreen + menu buttons) */
+/* Hide Altair chart toolbar */
 .vega-embed summary,
 .vega-embed .vega-actions,
 .vega-embed details { display:none !important; }
@@ -636,6 +642,25 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ── Hidden chart-type trigger buttons ── JS clicks these from settings panel ──
+st.markdown("""<style>
+div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_line"]),
+div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_candle"]),
+div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_bar"]) {
+    height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;min-height:0!important;
+}
+</style>""", unsafe_allow_html=True)
+_ct_cols = st.columns(3)
+with _ct_cols[0]:
+    if st.button("", key="ct_line"):
+        st.session_state["chart_type"] = "line"; st.rerun()
+with _ct_cols[1]:
+    if st.button("", key="ct_candle"):
+        st.session_state["chart_type"] = "candle"; st.rerun()
+with _ct_cols[2]:
+    if st.button("", key="ct_bar"):
+        st.session_state["chart_type"] = "bar"; st.rerun()
+
 # Settings panel — inject CSS + DOM + JS all into the PARENT document from the iframe
 import streamlit.components.v1 as _stc
 _stc.html(f"""
@@ -846,9 +871,9 @@ _stc.html(f"""
         var el = P.getElementById('mm-chart-' + t);
         if (el) el.className = 'mm-tbtn' + (t === type ? ' t-active-chart' : '');
       }});
-      var url = new URL(window.parent.location.href);
-      url.searchParams.set('chart', type);
-      window.parent.history.replaceState({{}}, '', url.toString());
+      // Click the real hidden Streamlit button to trigger a Python rerun
+      var btn = P.querySelector('button[data-key="ct_' + type + '"]');
+      if (btn) btn.click();
     }}
     applyChart(MM.chartType);
     ['line','candle','bar'].forEach(function(t) {{
@@ -1172,7 +1197,11 @@ if active == "market":
                 chart = _area + _line + _tick
             else:
                 chart = alt.Chart(df).mark_line(color=chart_color, strokeWidth=2, interpolate="monotone").encode(x=_x, y=_y)
-            st.altair_chart(chart.properties(height=220, background="transparent").configure_view(strokeWidth=0), use_container_width=True)
+            st.altair_chart(
+                chart.properties(height=220, background="transparent").configure_view(strokeWidth=0),
+                use_container_width=True,
+                theme=None
+            )
         st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
 
 elif active == "news":
@@ -1355,8 +1384,9 @@ elif active == "loans":
         open_cls  = "bkp-open" if is_open else ""
         chev      = "▾" if is_open else "▸"
 
+        # Render the card HTML
         st.markdown(f"""
-        <div class="bkp-wrap {theme}" id="bkcard-{bk_id}" style="cursor:pointer;margin-bottom:16px">
+        <div class="bkp-wrap {theme}" id="bkcard-{bk_id}" style="cursor:pointer;margin-bottom:4px">
           <div class="bkp-head {open_cls}">
             <div class="bkp-stripe"></div>
             <div class="bkp-content">
@@ -1376,28 +1406,30 @@ elif active == "loans":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # Wire click: JS sets ?bank_open=id in the parent URL (same tab, no navigation).
-        # Streamlit reads st.query_params on every rerun — the 3s autorefresh picks it up.
+        # Real hidden Streamlit button — JS clicks it when card is tapped
+        # CSS collapses all wrapper divs to zero height so nothing is visible
+        st.markdown(f"""<style>
+        div[data-testid="stVerticalBlock"]:has(> div > div > button[data-testid="baseButton-secondary"][data-key="bk_tog_{bk_id}"]) {{
+            height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;min-height:0!important;
+        }}
+        </style>""", unsafe_allow_html=True)
+        if st.button("", key=f"bk_tog_{bk_id}"):
+            st.session_state["bank_open"] = None if is_open else bk_id
+            st.rerun()
+
+        # Wire card click → hidden button
         import streamlit.components.v1 as _bkc
         _bkc.html(f"""<script>
         (function(){{
-          var P = window.parent;
+          var P = window.parent.document;
           function wire() {{
-            var card = P.document.getElementById('bkcard-{bk_id}');
+            var card = P.getElementById('bkcard-{bk_id}');
             if (!card) {{ setTimeout(wire, 80); return; }}
             if (card.dataset.wired === '1') return;
             card.dataset.wired = '1';
-            card.addEventListener('click', function(e) {{
-              e.preventDefault(); e.stopPropagation();
-              var url = new URL(P.location.href);
-              var cur = url.searchParams.get('bank_open');
-              if (cur === '{bk_id}') {{
-                url.searchParams.delete('bank_open');
-              }} else {{
-                url.searchParams.set('bank_open', '{bk_id}');
-              }}
-              // replaceState stays on the same page — Streamlit picks up on next rerun
-              P.history.replaceState({{}}, '', url.toString());
+            card.addEventListener('click', function() {{
+              var btn = P.querySelector('button[data-key="bk_tog_{bk_id}"]');
+              if (btn) btn.click();
             }});
           }}
           wire();
