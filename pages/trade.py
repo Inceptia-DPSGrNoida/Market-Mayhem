@@ -642,24 +642,21 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Hidden chart-type trigger buttons ── JS clicks these from settings panel ──
+# ── Hidden chart-type trigger buttons ──────────────────────────────────────────
 st.markdown("""<style>
-div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_line"]),
-div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_candle"]),
-div[data-testid="stVerticalBlock"]:has(> div > div > button[data-key="ct_bar"]) {
-    height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;min-height:0!important;
+div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_line"]),
+div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_candle"]),
+div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_bar"]) {
+    position:fixed !important; left:-9999px !important; top:-9999px !important;
+    width:0 !important; height:0 !important; overflow:hidden !important; opacity:0 !important;
 }
 </style>""", unsafe_allow_html=True)
-_ct_cols = st.columns(3)
-with _ct_cols[0]:
-    if st.button("", key="ct_line"):
-        st.session_state["chart_type"] = "line"; st.rerun()
-with _ct_cols[1]:
-    if st.button("", key="ct_candle"):
-        st.session_state["chart_type"] = "candle"; st.rerun()
-with _ct_cols[2]:
-    if st.button("", key="ct_bar"):
-        st.session_state["chart_type"] = "bar"; st.rerun()
+if st.button("L", key="ct_line"):
+    st.session_state["chart_type"] = "line"; st.rerun()
+if st.button("C", key="ct_candle"):
+    st.session_state["chart_type"] = "candle"; st.rerun()
+if st.button("B", key="ct_bar"):
+    st.session_state["chart_type"] = "bar"; st.rerun()
 
 # Settings panel — inject CSS + DOM + JS all into the PARENT document from the iframe
 import streamlit.components.v1 as _stc
@@ -1406,14 +1403,14 @@ elif active == "loans":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # Real hidden Streamlit button — JS clicks it when card is tapped
-        # CSS collapses all wrapper divs to zero height so nothing is visible
+        # Hidden trigger button
         st.markdown(f"""<style>
-        div[data-testid="stVerticalBlock"]:has(> div > div > button[data-testid="baseButton-secondary"][data-key="bk_tog_{bk_id}"]) {{
-            height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;min-height:0!important;
+        div[data-testid="stElementContainer"]:has(button[data-key="bk_tog_{bk_id}"]) {{
+            position:fixed !important; left:-9999px !important; top:-9999px !important;
+            width:0 !important; height:0 !important; overflow:hidden !important; opacity:0 !important;
         }}
         </style>""", unsafe_allow_html=True)
-        if st.button("", key=f"bk_tog_{bk_id}"):
+        if st.button("x", key=f"bk_tog_{bk_id}"):
             st.session_state["bank_open"] = None if is_open else bk_id
             st.rerun()
 
