@@ -91,7 +91,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .sell-btn button { background:rgba(255,77,106,0.1) !important; border:1px solid rgba(255,77,106,0.35) !important; color:#FF4D6A !important; font-weight:700 !important; font-size:14px !important; height:42px !important; }
 .sell-btn button:hover { background:rgba(255,77,106,0.2) !important; }
 .sell-btn button:disabled { opacity:0.3 !important; }
-.max-btn  button { background:rgba(255,255,255,0.04) !important; border:1px solid rgba(255,255,255,0.1) !important; color:rgba(255,255,255,0.35) !important; font-size:11px !important; font-weight:600 !important; height:42px !important; }
+.max-btn  button { background:rgba(255,200,0,0.07) !important; border:1px solid rgba(255,200,0,0.25) !important; color:#ffd93d !important; font-size:11px !important; font-weight:700 !important; height:42px !important; }
 
 .port-card { background:#0d0f1a; border:1px solid #1e2535; border-radius:12px; padding:18px 22px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
 .port-name { font-size:15px; font-weight:600; color:#fff; }
@@ -259,7 +259,11 @@ body.light-mode .max-btn  button { background:#fef9e0 !important; border-color:#
 body.light-mode .loan-btn button { background:#ede8ff !important; border-color:#5b3fa0 !important; color:#5b3fa0 !important; }
 body.light-mode .repay-btn button{ background:#fde8e8 !important; border-color:#c0392b !important; color:#c0392b !important; }
 
-/* Risk badges */
+/* Hide Altair chart toolbar (fullscreen + menu buttons) */
+.vega-embed summary,
+.vega-embed .vega-actions,
+.vega-embed details { display:none !important; }
+.vega-embed { padding:0 !important; }
 body.light-mode .risk-low         { background:rgba(0,120,70,0.1);  color:#006b3c; border-color:rgba(0,120,70,0.3); }
 body.light-mode .risk-medium      { background:rgba(160,120,0,0.1); color:#7a5c00; border-color:rgba(160,120,0,0.3); }
 body.light-mode .risk-high        { background:rgba(160,0,30,0.08); color:#a0001e; border-color:rgba(160,0,30,0.25); }
@@ -1252,14 +1256,22 @@ elif active == "loans":
     .bkp-m .bkp-rate-col  { background:rgba(255,217,61,0.05); }
     .bkp-r .bkp-rate-col  { background:rgba(255,77,106,0.05); }
 
-    /* ── Accordion body ── */
-    .bkp-body { padding:20px 24px 22px; border:1px solid; border-top:none; border-radius:0 0 18px 18px; }
-    .bkp-s .bkp-body { background:#050e09; border-color:rgba(0,200,150,0.2); }
-    .bkp-m .bkp-body { background:#0e0c04; border-color:rgba(255,217,61,0.2); }
-    .bkp-r .bkp-body { background:#0e0407; border-color:rgba(255,77,106,0.2); }
+    /* ── Accordion connector strip — sits flush under card as design element ── */
+    .bkp-body {
+        padding: 14px 24px 6px;
+        border-left: 1px solid;
+        border-right: 1px solid;
+        border-bottom: none;
+        border-top: none;
+        margin-top: -4px;
+        margin-bottom: 8px;
+    }
+    .bkp-s .bkp-body { background:linear-gradient(180deg,#071a12,transparent); border-color:rgba(0,200,150,0.2); }
+    .bkp-m .bkp-body { background:linear-gradient(180deg,#181408,transparent); border-color:rgba(255,217,61,0.2); }
+    .bkp-r .bkp-body { background:linear-gradient(180deg,#1a080d,transparent); border-color:rgba(255,77,106,0.2); }
     .bkp-body-lbl { font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.3); margin-bottom:14px; }
 
-    /* ── Loan amount buttons — hide Streamlit chrome ── */
+    /* ── Loan amount buttons — per-theme colours via class on the wrapper div ── */
     .loan-amt-btn button {
         border-radius:10px !important; font-weight:700 !important;
         font-size:14px !important; height:46px !important;
@@ -1267,12 +1279,10 @@ elif active == "loans":
         transition:transform 0.12s, box-shadow 0.12s !important;
     }
     .loan-amt-btn button:not(:disabled):hover { transform:translateY(-2px) !important; box-shadow:0 4px 14px rgba(0,0,0,0.4) !important; }
-
-    /* first 4 buttons per bank */
-    .bkp-s .loan-amt-btn button { background:rgba(0,200,150,0.1) !important; border:1px solid rgba(0,200,150,0.35) !important; color:#00C896 !important; }
-    .bkp-m .loan-amt-btn button { background:rgba(255,217,61,0.08) !important; border:1px solid rgba(255,217,61,0.35) !important; color:#ffd93d !important; }
-    .bkp-r .loan-amt-btn button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.35) !important; color:#FF4D6A !important; }
-    /* 5th (max) button always pink */
+    .loan-amt-btn.theme-s button { background:rgba(0,200,150,0.1) !important; border:1px solid rgba(0,200,150,0.35) !important; color:#00C896 !important; }
+    .loan-amt-btn.theme-m button { background:rgba(255,217,61,0.08) !important; border:1px solid rgba(255,217,61,0.35) !important; color:#ffd93d !important; }
+    .loan-amt-btn.theme-r button { background:rgba(255,77,106,0.08) !important; border:1px solid rgba(255,77,106,0.35) !important; color:#FF4D6A !important; }
+    /* 5th (max) button always pink — overrides theme */
     .loan-amt-btn.loan-max button { background:rgba(236,72,153,0.1) !important; border:1px solid rgba(236,72,153,0.4) !important; color:#ec4899 !important; }
 
     /* ── Repay buttons ── */
@@ -1406,12 +1416,13 @@ elif active == "loans":
                 if valid_amts:
                     st.markdown('<div class="bkp-body-lbl">Choose amount to borrow</div>', unsafe_allow_html=True)
                     bcols = st.columns(len(valid_amts))
+                    # theme_short maps bkp-s/m/r → s/m/r for the button class
+                    theme_short = theme.replace("bkp-", "")
                     for i, amt in enumerate(valid_amts):
-                        # last button in the list = max available → pink
                         is_max = (i == len(valid_amts) - 1) and len(valid_amts) > 1
                         max_cls = "loan-max" if is_max else ""
                         with bcols[i]:
-                            st.markdown(f'<div class="loan-amt-btn {max_cls}">', unsafe_allow_html=True)
+                            st.markdown(f'<div class="loan-amt-btn theme-{theme_short} {max_cls}">', unsafe_allow_html=True)
                             if st.button(fmt(amt), key=f"borrow_{bk_id}_{amt}", use_container_width=True):
                                 state = load_state(); team = state["teams"][tid]
                                 team["cash"] = team.get("cash", 0) + amt
