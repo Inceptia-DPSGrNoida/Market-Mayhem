@@ -166,8 +166,30 @@ body.light-mode [data-testid="stAppViewBlockContainer"],
 body.light-mode section.main,
 body.light-mode .block-container,
 body.light-mode [data-testid="column"],
-body.light-mode [data-testid="stVerticalBlock"] {
+body.light-mode [data-testid="stVerticalBlock"],
+body.light-mode [data-testid="stHorizontalBlock"],
+body.light-mode [data-testid="stElementContainer"],
+body.light-mode [data-testid="stMarkdownContainer"],
+body.light-mode .stApp,
+body.light-mode .main {
   background: #f5f2ed !important; color: #1c2b1c !important;
+}
+/* Streamlit native widget overrides */
+body.light-mode [data-testid="stNumberInput"] input,
+body.light-mode [data-testid="stTextInput"] input,
+body.light-mode [data-testid="stTextArea"] textarea {
+  background: #fffef9 !important; color: #1c2b1c !important;
+  border-color: #ddd5c8 !important;
+}
+body.light-mode [data-testid="stForm"],
+body.light-mode [data-testid="stExpander"] {
+  background: #fffef9 !important; border-color: #ddd5c8 !important;
+}
+/* Force all plain text in light mode to be dark */
+body.light-mode p, body.light-mode span, body.light-mode div,
+body.light-mode label, body.light-mode h1, body.light-mode h2,
+body.light-mode h3, body.light-mode h4 {
+  color: #1c2b1c;
 }
 
 /* Ticker */
@@ -349,7 +371,9 @@ def should_show_news(n, current_phase):
     return True  # insider, custom — always visible
 
 state = load_state()
-tid = st.session_state.get("team_id")
+tid = st.session_state.get("team_id") or st.query_params.get("tid")
+if tid and not st.session_state.get("team_id"):
+    st.session_state["team_id"] = tid
 if tid and tid not in state["teams"]:
     st.session_state.clear(); st.rerun()
 team = state["teams"].get(tid) if tid else None
@@ -399,6 +423,7 @@ if not team:
                     }
                     save_state(state)
                     st.session_state["team_id"] = new_tid
+                    st.query_params["tid"] = new_tid
                     st.rerun()
     st.markdown('<h2 style="font-family:Space Grotesk,sans-serif;font-size:28px;font-weight:700;color:#fff;margin:48px 0 20px;letter-spacing:-0.5px">How it works</h2>', unsafe_allow_html=True)
     rules = [
@@ -642,21 +667,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Hidden chart-type trigger buttons ──────────────────────────────────────────
-st.markdown("""<style>
-div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_line"]),
-div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_candle"]),
-div[data-testid="stElementContainer"]:has(button[data-testid="baseButton-secondary"][data-key="ct_bar"]) {
-    position:fixed !important; left:-9999px !important; top:-9999px !important;
-    width:0 !important; height:0 !important; overflow:hidden !important; opacity:0 !important;
-}
-</style>""", unsafe_allow_html=True)
-if st.button("L", key="ct_line"):
-    st.session_state["chart_type"] = "line"; st.rerun()
-if st.button("C", key="ct_candle"):
-    st.session_state["chart_type"] = "candle"; st.rerun()
-if st.button("B", key="ct_bar"):
-    st.session_state["chart_type"] = "bar"; st.rerun()
+
 
 # Settings panel — inject CSS + DOM + JS all into the PARENT document from the iframe
 import streamlit.components.v1 as _stc
@@ -848,7 +859,7 @@ _stc.html(f"""
       else       P.body.classList.remove('light-mode');
       var url = new URL(window.parent.location.href);
       url.searchParams.set('theme', light ? 'light' : 'dark');
-      window.parent.history.replaceState({{}}, '', url.toString());
+      window.parent.location.href = url.toString();
     }}
     // Apply current state immediately (no flicker)
     applyTheme(MM.isLight);
@@ -868,9 +879,10 @@ _stc.html(f"""
         var el = P.getElementById('mm-chart-' + t);
         if (el) el.className = 'mm-tbtn' + (t === type ? ' t-active-chart' : '');
       }});
-      // Click the real hidden Streamlit button to trigger a Python rerun
-      var btn = P.querySelector('button[data-key="ct_' + type + '"]');
-      if (btn) btn.click();
+      // Navigate to same page with ?chart=type — Streamlit reads this on rerun
+      var url = new URL(window.parent.location.href);
+      url.searchParams.set('chart', type);
+      window.parent.location.href = url.toString();
     }}
     applyChart(MM.chartType);
     ['line','candle','bar'].forEach(function(t) {{
@@ -1381,57 +1393,44 @@ elif active == "loans":
         open_cls  = "bkp-open" if is_open else ""
         chev      = "▾" if is_open else "▸"
 
-        # Render the card HTML
-        st.markdown(f"""
-        <div class="bkp-wrap {theme}" id="bkcard-{bk_id}" style="cursor:pointer;margin-bottom:4px">
-          <div class="bkp-head {open_cls}">
-            <div class="bkp-stripe"></div>
-            <div class="bkp-content">
-              <div class="bkp-name">{icon}&nbsp; {bk['name']}</div>
-              <div class="bkp-meta">Limit: {fmt(bk['cap'])} &nbsp;·&nbsp; Borrowed: {fmt(bank_bal)} ({used_pct}%)</div>
-              <div class="bkp-bar-wrap">
-                <div class="bkp-bar-bg"><div class="bkp-bar-fill" style="width:{used_pct}%"></div></div>
-                <span class="bkp-bar-lbl">{used_pct}% used</span>
-              </div>
-              <div class="bkp-note">{bk['note']}</div>
-            </div>
-            <div class="bkp-rate-col">
-              <div class="bkp-rate-num">{int(bk['rate']*100)}%</div>
-              <div class="bkp-rate-lbl">per round</div>
-            </div>
-            <div class="bkp-chev">{chev}</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-        # Hidden trigger button
+        # Clean approach: full-width styled button IS the card
+        # Use CSS to make the button look exactly like the card panel
+        btn_themes = {
+            "bkp-s": ("linear-gradient(135deg,#071a12 0%,#0d2018 100%)", "rgba(0,200,150,0.3)", "#00C896", "rgba(0,200,150,0.06)"),
+            "bkp-m": ("linear-gradient(135deg,#181408 0%,#201a08 100%)", "rgba(255,217,61,0.3)",  "#ffd93d", "rgba(255,217,61,0.06)"),
+            "bkp-r": ("linear-gradient(135deg,#1a080d 0%,#220812 100%)", "rgba(255,77,106,0.3)",  "#FF4D6A", "rgba(255,77,106,0.06)"),
+        }
+        bg, border, rc, rc_bg = btn_themes.get(theme, btn_themes["bkp-s"])
+        # Stripe color for left border
+        stripe = rc
         st.markdown(f"""<style>
-        div[data-testid="stElementContainer"]:has(button[data-key="bk_tog_{bk_id}"]) {{
-            position:fixed !important; left:-9999px !important; top:-9999px !important;
-            width:0 !important; height:0 !important; overflow:hidden !important; opacity:0 !important;
+        button[data-key="bk_tog_{bk_id}"] {{
+            background:{bg} !important;
+            border:1px solid {border} !important;
+            border-left:6px solid {stripe} !important;
+            border-radius:18px !important;
+            padding:18px 20px 18px 20px !important;
+            height:auto !important; min-height:120px !important;
+            width:100% !important;
+            text-align:left !important;
+            margin-bottom:12px !important;
+            cursor:pointer !important;
+            transition:filter 0.18s !important;
+        }}
+        button[data-key="bk_tog_{bk_id}"]:hover {{ filter:brightness(1.12) !important; }}
+        button[data-key="bk_tog_{bk_id}"] p {{
+            font-family:'Space Grotesk',monospace !important;
+            font-size:15px !important; font-weight:700 !important;
+            color:#fff !important; text-align:left !important;
+            white-space:pre-wrap !important; line-height:1.8 !important;
+            margin:0 !important;
         }}
         </style>""", unsafe_allow_html=True)
-        if st.button("x", key=f"bk_tog_{bk_id}"):
+        bar_filled = "█" * (used_pct // 10) + "░" * (10 - used_pct // 10)
+        btn_label = f"{icon}  {bk['name']}  {chev}\n{int(bk['rate']*100)}% per round   |   Limit {fmt(bk['cap'])}   ·   Borrowed {fmt(bank_bal)} ({used_pct}%)\n{bk['note']}"
+        if st.button(btn_label, key=f"bk_tog_{bk_id}", use_container_width=True):
             st.session_state["bank_open"] = None if is_open else bk_id
             st.rerun()
-
-        # Wire card click → hidden button
-        import streamlit.components.v1 as _bkc
-        _bkc.html(f"""<script>
-        (function(){{
-          var P = window.parent.document;
-          function wire() {{
-            var card = P.getElementById('bkcard-{bk_id}');
-            if (!card) {{ setTimeout(wire, 80); return; }}
-            if (card.dataset.wired === '1') return;
-            card.dataset.wired = '1';
-            card.addEventListener('click', function() {{
-              var btn = P.querySelector('button[data-key="bk_tog_{bk_id}"]');
-              if (btn) btn.click();
-            }});
-          }}
-          wire();
-        }})();
-        </script>""", height=0)
 
         # ── Accordion body ─────────────────────────────────────────────────────
         if is_open:
